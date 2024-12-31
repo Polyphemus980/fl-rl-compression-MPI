@@ -6,7 +6,52 @@ _Kacper Trzciński_
 
 ### Kompresja
 
-TODO
+Posłużymy się prostym przykładem do wizualizacji sposobu:
+
+- input: **[0, 2, 1, 5, 5, 7, 10, 1, 13]**
+- outputBits: **[2, 3, 4]**
+- outputValues (binarnie): **00_10_01---101_101_111---1010_0001_1101**
+
+Zakładamy, że w tym przypadku frame ma wielkość 3 (w finalnym projekcie będzie to albo wartość możliwa do ustawienia podczas uruchomienia programu, albo inna większa wartość).
+`outputBits` oznacza liczbę bitów potrzebną do zakodowania danych w framie, `outputValues` zawiera dane już zakodowane, gdzie kodowanie w naszym przypadku to po prostu ucinanie nieznaczących zer na początku. W przykładowym outpucie `---` oznacza przejście do nowego frame'a.
+
+1. Tworzymy tablicę `requiredBits` o dlugości n, która będzie zawierała informację o tym, ile bitów jest potrzebnych do zapisania danej wartości. W naszym przypadku to będzie:
+
+   ```
+   [1, 2, 1, 3, 3, 3, 4, 1, 4]
+   ```
+
+   Możemy ją utworzyć poprzez utworzenie threada dla każdego elementu inputu i obliczenia dla niego `32 - __clz(input[i])`, przy czym musimy uważać na przypadek gdy `input[i] == 0`, wtedy po prostu zwracamy 1.
+
+2. Następnie chcemy obliczyć tablicę `outputBits`, która będzie długości `ceil(input.length / frame.length)`, czyli dokładnie tyle, ile będzie framów w finalnym wyniku. Wówczas `outputBits[i] = thrust::max_element(requiredBits[i * frame.Length], requiredBits[(i + 1) * frame.Length])`. Dodatkowo chcemy utworzyć zmienna globalną `outputValuesMinLength`, którą każdy thread (przy użyciu shared memory per block dla optymalizacji) będzie zwiększał o `outputBits[i] * frame.Length`.
+
+3. Potrzebujemy obliczyć jeszcze tablicę `frameStartIndices`, która w naszym przypadku będzie postaci:
+
+   ```
+   [0, 2 * 3, 2 * 3 + 3 * 3] = [0, 6, 15]
+   ```
+
+   Aby ją utworzyć wystarczy:
+
+   - utworzyć tablice `frameBitsLength` stworzonej poprzez `frameBitsLength[i] = outputBits[i] * frame.Length`
+   - wywołać na tablicy `frameBitsLength` algorytm `Prescan`.
+     (algorytm `Prescan` zaimplementowany zgodnie ze wskazówkami z wykładu)
+
+4. Teraz chcemy utworzyć tablicę `outputValues`. Bedzię ona miała dlugość (w bajtach) `ceil(outputValuesMinlength / 8)`. Następnie tworzymy `n` threadów, gdzie `n` to liczba elementów tablicy `input`. Dla każdego threada wykonujemy następujące operacje:
+
+   - obliczamy `frameId = i / frame.Length`
+   - obliczamy `frameElemntId = i % frame.Length`
+   - obliczamy `requiredBits = outputBits[frameId]`
+   - obliczamy `bitsOffset = frameStartIndices[frameId] + frameElementId * requiredBits`
+   - obliczamy `outputId = bitsOffset / 32` (dzielimy przez 32, bo obliczone wartości są w bitach, a my mamy tablicę intów).
+   - obliczamy `outputOffset = bitsOffset % 32` (jest to offset wewnątrz inta)
+   - obliczamy `mask = (1 << requiredBits) - 1`
+   - obliczamy `encodedValue = (input[i] & mask) << outputOffset`
+   - zapisujemy wynik `atomicOr(output[outputId], encodedValue)`
+   - Dodatkowo musimy rozpatrzeć przypadek, gdy wartość będzie rozbita na dwa sąsiadujące inty (czyli kiedy `outputOffset + requiredBits > 32`) - wtedy obliczamy `overflowValue = (encodedValue & mask) >> (32 - outputOffset)`
+     i zapisujemy wynik w kolejnym elemencie poprzez `atomirOr(output[outputId + 1], overflowValue)`
+
+   Oczywiście operacje atomiczne robimy najpierw na shared memory a dopiero później przepisujemy wyniki do pamięci globalnej, jednak dla czytelności opisu nie rozpisywałem tych szczegółów.
 
 ### Dekompresja
 
