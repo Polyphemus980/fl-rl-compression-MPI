@@ -13,7 +13,7 @@ Posłużymy się prostym przykładem do wizualizacji sposobu:
 - outputValues (binarnie): **00_10_01---101_101_111---1010_0001_1101**
 
 Zakładamy, że w tym przypadku frame ma wielkość 3 (w finalnym projekcie będzie to albo wartość możliwa do ustawienia podczas uruchomienia programu, albo inna większa wartość).
-`outputBits` oznacza liczbę bitów potrzebną do zakodowania danych w framie, `outputValues` zawiera dane już zakodowane, gdzie kodowanie w naszym przypadku to po prostu ucinanie nieznaczących zer na początku. W przykładowym outpucie `---` oznacza przejście do nowego frame'a.
+`outputBits` oznacza liczbę bitów potrzebną do zakodowania danych w framie, `outputValues` zawiera dane już zakodowane, gdzie kodowanie w naszym przypadku to po prostu ucinanie nieznaczących zer na początku. W przykładowym outpucie `---` oznacza przejście do nowego frame'a (jest ono wprowadzone tylko w celu łatwiejszego odczytania przykładu). Dodatkowo, zapis binarny wyniku nie jest w takiej postaci, w jakiej będzie to faktycznie zapisane w pamięci - jest to raczej przedstawienie, w jaki sposób chcemy daną liczbę zakodować. Nie przedstawiam faktycznego obrazu pamięci jako, że uważam, ze zaciemni to jedynie obraz i ogólny koncept algorytmu.
 
 1. Tworzymy tablicę `requiredBits` o dlugości n, która będzie zawierała informację o tym, ile bitów jest potrzebnych do zapisania danej wartości. W naszym przypadku to będzie:
 
@@ -49,13 +49,42 @@ Zakładamy, że w tym przypadku frame ma wielkość 3 (w finalnym projekcie będ
    - obliczamy `encodedValue = (input[i] & mask) << outputOffset`
    - zapisujemy wynik `atomicOr(output[outputId], encodedValue)`
    - Dodatkowo musimy rozpatrzeć przypadek, gdy wartość będzie rozbita na dwa sąsiadujące inty (czyli kiedy `outputOffset + requiredBits > 32`) - wtedy obliczamy `overflowValue = (encodedValue & mask) >> (32 - outputOffset)`
-     i zapisujemy wynik w kolejnym elemencie poprzez `atomirOr(output[outputId + 1], overflowValue)`
+     i zapisujemy wynik w kolejnym elemencie poprzez `atomicOr(output[outputId + 1], overflowValue)`
 
    Oczywiście operacje atomiczne robimy najpierw na shared memory a dopiero później przepisujemy wyniki do pamięci globalnej, jednak dla czytelności opisu nie rozpisywałem tych szczegółów.
 
 ### Dekompresja
 
-TODO
+Posłużymy się prostym przykładem do wizualizacji sposobu:
+
+- inputBits: **[2, 3, 4]**
+- inputValues (binarnie): **00_10_01---101_101_111---1010_0001_1101**
+- output: **[0, 2, 1, 5, 5, 7, 10, 1, 13]**
+
+  Przy czym zachodzą te same uwagi, które były we wstępie do `Kompresji Fixed-Length` odnośnie zapisu przykładu.
+
+Kolejne kroki:
+
+1. Tworzymy tablicę `frameStartIndices` (tak samo jak w pkt.3 kompresji Fixed-length, z tą różnicą, że używamy `inputBits` zamiast `outputBits`).
+2. Tworzymy tablicę `output`, która będzie miała długość `frameLength * inputBits.Length` (bo każdy frame ma `frameLength` elementów, a framów jest tyle samo, co elementów w tablicy `inputBits`).
+3. Uruchamiamy `n` threadów, gdzie `n` to długość tablicy `output`. Dla threada o indeksie `i` wykonujemy następujące operacje:
+
+   - obliczamy `frameId = i / frame.Length`
+   - obliczamy `frameElementId = i % frame.Length`
+   - obliczamy `usedBits = inputBits[frameId]`
+   - obliczamy `bitsOffset = frameStartIndices[frameId] + frameElementId * usedBits`
+   - obliczamy `inputId = bitsOffset / 32`
+   - obliczamy `inputOffset = bitsOffset % 32`
+   - obliczamy `mask = (1 << usedBits) - 1`
+   - obliczamy `decodedValue = (inputValues[inputId] >> inputOffset) & mask`
+   - dodatkowo rozpatrujemy przypadek, gdy wartość była zapisana na dwóch sąsiednich elementach w tablicy (czyli kiedy zachodzi `inputOffset + usedBits > 32`) - wtedy obliczamy:
+     - `overflowBits = inputOffset + usedBits - 32`
+     - `overflowMask = (1 << overflowBits) - 1`
+     - `overflowValue = inputValues[inputId + 1] & overflowMask << (usedBits - overflowBits)`
+     - `decodedValue |= overflowValue`
+   - tak otrzymany wynik zapisujemy w finałowej tablicy `output[i] = decodedValue`
+
+   Podobnie jak w przypadku kompresji, używamy shared memory do optymalizacji odczytywania danych z pamięci.
 
 ## Run-Length
 
