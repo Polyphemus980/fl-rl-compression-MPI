@@ -15,7 +15,7 @@ Posłużymy się prostym przykładem do wizualizacji sposobu:
 Zakładamy, że w tym przypadku frame ma wielkość 3 (w finalnym projekcie będzie to albo wartość możliwa do ustawienia podczas uruchomienia programu, albo inna większa wartość).
 `outputBits` oznacza liczbę bitów potrzebną do zakodowania danych w framie, `outputValues` zawiera dane już zakodowane, gdzie kodowanie w naszym przypadku to po prostu ucinanie nieznaczących zer na początku. W przykładowym outpucie `---` oznacza przejście do nowego frame'a (jest ono wprowadzone tylko w celu łatwiejszego odczytania przykładu). Dodatkowo, zapis binarny wyniku nie jest w takiej postaci, w jakiej będzie to faktycznie zapisane w pamięci - jest to raczej przedstawienie, w jaki sposób chcemy daną liczbę zakodować. Nie przedstawiam faktycznego obrazu pamięci jako, że uważam, ze zaciemni to jedynie obraz i ogólny koncept algorytmu.
 
-1. Tworzymy tablicę `requiredBits` o dlugości n, która będzie zawierała informację o tym, ile bitów jest potrzebnych do zapisania danej wartości. W naszym przypadku to będzie:
+1. Tworzymy tablicę `requiredBits` o dlugości `n`, gdzie `n` to długość tablicy `input`, która będzie zawierała informację o tym, ile bitów jest potrzebnych do zapisania danej wartości. W naszym przypadku to będzie:
 
    ```
    [1, 2, 1, 3, 3, 3, 4, 1, 4]
@@ -159,4 +159,4 @@ Kolejne kroki:
    startIndices[j] <= i < startIndices[j + 1]
    ```
 
-   przy czym dla `j == startIndices.length` przyjmujemy `startIndices[j + 1] = inf`. Zauważmy, że wówczas `output[i] = inputValues[j]`, co kończy algorytm.
+   przy czym dla `j == startIndices.length - 1` przyjmujemy `startIndices[j + 1] = inf`. Zauważmy, że wówczas `output[i] = inputValues[j]`, co kończy algorytm.
