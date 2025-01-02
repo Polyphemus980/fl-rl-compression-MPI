@@ -13,7 +13,7 @@ Posłużymy się prostym przykładem do wizualizacji sposobu:
 - outputValues (binarnie): **00_10_01---101_101_111---1010_0001_1101**
 
 Zakładamy, że w tym przypadku frame ma wielkość 3 (w finalnym projekcie będzie to albo wartość możliwa do ustawienia podczas uruchomienia programu, albo inna większa wartość).
-`outputBits` oznacza liczbę bitów potrzebną do zakodowania danych w framie, `outputValues` zawiera dane już zakodowane, gdzie kodowanie w naszym przypadku to po prostu ucinanie nieznaczących zer na początku. W przykładowym outpucie `---` oznacza przejście do nowego frame'a (jest ono wprowadzone tylko w celu łatwiejszego odczytania przykładu). Dodatkowo, zapis binarny wyniku nie jest w takiej postaci, w jakiej będzie to faktycznie zapisane w pamięci - jest to raczej przedstawienie, w jaki sposób chcemy daną liczbę zakodować. Nie przedstawiam faktycznego obrazu pamięci jako, że uważam, ze zaciemni to jedynie obraz i ogólny koncept algorytmu.
+`outputBits` oznacza liczbę bitów potrzebną do zakodowania danych w framie, `outputValues` zawiera dane już zakodowane, gdzie kodowanie w naszym przypadku to po prostu ucinanie nieznaczących zer. W przykładowym outpucie `---` oznacza przejście do nowego frame'a (jest ono wprowadzone tylko w celu łatwiejszego odczytania przykładu). Dodatkowo, zapis binarny wyniku nie jest w takiej postaci, w jakiej będzie to faktycznie zapisane w pamięci - jest to raczej przedstawienie, w jaki sposób chcemy daną liczbę zakodować. Nie przedstawiam faktycznego obrazu pamięci jako, że uważam, ze zaciemni to jedynie obraz i ogólny koncept algorytmu.
 
 1. Tworzymy tablicę `requiredBits` o dlugości `n`, gdzie `n` to długość tablicy `input`, która będzie zawierała informację o tym, ile bitów jest potrzebnych do zapisania danej wartości. W naszym przypadku to będzie:
 
@@ -40,7 +40,7 @@ Zakładamy, że w tym przypadku frame ma wielkość 3 (w finalnym projekcie będ
 4. Teraz chcemy utworzyć tablicę `outputValues`. Bedzię ona miała dlugość (w bajtach) `ceil(outputValuesMinlength / 8)`. Następnie tworzymy `n` threadów, gdzie `n` to liczba elementów tablicy `input`. Dla każdego threada wykonujemy następujące operacje:
 
    - obliczamy `frameId = i / frame.Length`
-   - obliczamy `frameElemntId = i % frame.Length`
+   - obliczamy `frameElementId = i % frame.Length`
    - obliczamy `requiredBits = outputBits[frameId]`
    - obliczamy `bitsOffset = frameStartIndices[frameId] + frameElementId * requiredBits`
    - obliczamy `outputId = bitsOffset / 32` (dzielimy przez 32, bo obliczone wartości są w bitach, a my mamy tablicę intów).
