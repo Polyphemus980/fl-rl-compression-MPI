@@ -90,6 +90,8 @@ Kolejne kroki:
 
 ### Kompresja
 
+TODO: handle case when outputCount[i] > 255
+
 Posłużymy się prostym przykładem do wizualizacji sposobu:
 
 - input: **[5, 5, 8, 8, 8, 7, 7, 7, 7, 3, 4, 4, 4]**
