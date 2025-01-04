@@ -14,6 +14,12 @@ namespace RunLength
         uint8_t *outputCounts;
         size_t count;
     };
+
+    struct CpuDecompressed
+    {
+        uint8_t *data;
+        size_t size;
+    };
 } // RunLength
 
 #endif // RL_COMMON_H

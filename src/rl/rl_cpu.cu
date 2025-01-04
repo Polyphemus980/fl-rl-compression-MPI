@@ -67,4 +67,41 @@ namespace RunLength
             .outputCounts = outputCounts,
             .count = count};
     }
+
+    CpuDecompressed cpuDecompress(uint8_t *values, uint8_t *counts, size_t size)
+    {
+        if (size == 0)
+        {
+            return CpuDecompressed{
+                .data = nullptr,
+                .size = 0};
+        }
+
+        size_t outputSize = 0;
+        for (size_t i = 0; i < size; i++)
+        {
+            outputSize += counts[i];
+        }
+
+        // Allocation
+        uint8_t *data = reinterpret_cast<uint8_t *>(malloc(sizeof(uint8_t) * outputSize));
+        if (data == nullptr)
+        {
+            throw std::runtime_error("Cannot allocate memory");
+        }
+
+        // Decompression
+        size_t global_id = 0;
+        for (size_t i = 0; i < size; i++)
+        {
+            for (size_t j = 0; j < counts[i]; j++)
+            {
+                data[global_id++] = values[i];
+            }
+        }
+
+        return CpuDecompressed{
+            .data = data,
+            .size = outputSize};
+    }
 } // RunLength
