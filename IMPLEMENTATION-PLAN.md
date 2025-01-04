@@ -90,8 +90,6 @@ Kolejne kroki:
 
 ### Kompresja
 
-TODO: handle case when outputCount[i] > 255
-
 Posłużymy się prostym przykładem do wizualizacji sposobu:
 
 - input: **[5, 5, 8, 8, 8, 7, 7, 7, 7, 3, 4, 4, 4]**
@@ -100,7 +98,7 @@ Posłużymy się prostym przykładem do wizualizacji sposobu:
 
 Kolejne kroki:
 
-1. Utworzenie tablicy _startMask_, która jest długości takiej samej jak dane wejściowe, i `startMask[i] = 1` wtedy i tylko wtedy, gdy `input[i]` jest początkiem nowej sekwencji do zakodowania. W naszym przypadku tablica `startMask` będzie miała postać:
+1. Utworzenie tablicy `startMask`, która jest długości takiej samej jak dane wejściowe, i `startMask[i] = 1` wtedy i tylko wtedy, gdy `input[i]` jest początkiem nowej sekwencji do zakodowania. W naszym przypadku tablica `startMask` będzie miała postać:
 
    ```
    [1, 0, 1, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0]
@@ -132,7 +130,33 @@ Kolejne kroki:
    - dla `i = 0` zawsze zachodzi `startIndices[0] = 0`
    - dla `i > 0` jeśli `scannedStartMask[i] != scannedStartMask[i - 1]` to oznacza, że i jest początkiem nowej sekwencji i wówczas `startIndices[scannedStartMask[i] - 1] = i`
 
-4. Na koniec używamy przygotowanych tablic do obliczenia finalnego wyniku. Tworzymy threada dla każdego elementu tablicy `startIndices` i tworzymy tablicę output, poprzez (niech `i` - numer threada oraz `n` - liczba threadow);
+4. Nasze wynikowe tablice chcemy traktować jako `uint8_t`, co oznacza, że w przypadku gdy długość sekwencji przekroczy `255` musimy daną sekwencję rozbić na części (np. w wypadku `256` tych samych symboli pod rząd utworzymy dwie sekwencje - jedna z `255` elementami i druga z `1` elementem, obydwie odnoszące się do tej samej wartości). Aby to zrobić, najpierw musimy sprawdzić czy taka sytuacja zachodzi poprzez:
+
+   - utworzenie tablicy `recalculateSequence` o dlugości o `1` mniejszej niż dlugość `startIndices`
+   - utworzenie zmiennej globalnej `bool shouldRecalcuate` (używając shared memory dla poprawy wydajności)
+   - odpalenie threada dla każdego elementu tablicy `startIndices`
+   - jeśli `startIndices[i + 1] - startIndices[i] > 255` (dla `i` różnego od `startIndices.Length - 1`) to zmieniamy flagę oznaczającą potrzebę poprawy na true (tzn ustawiamy `shouldRecalculate` na `true` za pomocą operacji atomicznej i dodatkowo ustawiamy `recalculateSequence[i] = (startIndices[i + 1] - startIndices[i]) / 255`).
+
+   Zauważmy, że jeśli `shouldRecalculate = false` to możemy od razu przejść do ostatniego punktu i wykorzystać już utworzone thready, bo jest ich tyle samo ile jest ich w ostatnim punkcie, tym samym oszczedzając tworzenie nowego kernela.
+
+   W przeciwnym przypadku, musimy utworzyć dodatkowe sekwencje poprzez:
+
+   - uruchomienie algorytmu `Prescan` na tablicy `recalculateSequence` i zapisanie wyniku w tablicy `recalculatePrescan`
+   - odpalenie `n` threadów, gdzie `n = recalculatePrescan.last + recalculate.Seqence.last`
+   - w czasie `O(log(n))` (za pomocą binary searcha) `i`-ty thread jest w stanie znaleźć takiej `j`, że zachodzi
+     ```
+     recalculatePrescan[j] <= i < recalculatePrescan[j + 1]
+     ```
+   - obliczamy `k = i - recalculatePrescan[j]`
+   - edytujemy `startMask` poprzez
+     ```
+     startMask[startIndices[j] + k * 255] = 1
+     ```
+
+   Po wykonaniu tych kroków wracamy do punktu `2` tym razem wiedząc, że nie będzie już przypadku z sekwencją dłuższą niż `255`.
+   Pomysł na to może wydawać się nieco "na około", jednak przypadek z sekwencją dłuższą niż `255` zakładam, że jest raczej rzadki, stąd główna idea była taka, żeby rozważyć to jak najmniejszym kosztem w przypadku, gdy takiej sekwencji nie ma.
+
+5. Na koniec używamy przygotowanych tablic do obliczenia finalnego wyniku. Tworzymy threada dla każdego elementu tablicy `startIndices` i tworzymy tablicę output, poprzez (niech `i` - numer threada oraz `n` - liczba threadow);
    - jesli `i < n - 1` to `outputValues[i] = input[startIndices[i]]` oraz `outputCount[i] = startIndices[i + 1] - startIndices[i]`
    - jeśli `i == n - 1` to `outputValues[n - 1] = input[startIndices[n-1]]` oraz `outputCount[n-1] = n - startIndices[n - 1]`
 
