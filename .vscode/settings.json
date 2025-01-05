@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "*.h": "c",
+        "*.cu": "cuda-cpp",
+        "*.cuh": "cuda-cpp",
+        "stdexcept": "cpp"
+    }
+}
