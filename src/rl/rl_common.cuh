@@ -5,7 +5,7 @@
 
 namespace RunLength
 {
-    struct CpuCompressed
+    struct RLCompressed
     {
         uint8_t *outputValues;
         // uint8_t is in range up to 255 which should be enough in most cases
@@ -15,7 +15,7 @@ namespace RunLength
         size_t count;
     };
 
-    struct CpuDecompressed
+    struct RLDecompressed
     {
         uint8_t *data;
         size_t size;

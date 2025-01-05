@@ -4,11 +4,11 @@
 
 namespace RunLength
 {
-    CpuCompressed cpuCompress(uint8_t *data, size_t size)
+    RLCompressed cpuCompress(uint8_t *data, size_t size)
     {
         if (size == 0)
         {
-            return CpuCompressed{
+            return RLCompressed{
                 .outputValues = nullptr,
                 .outputCounts = nullptr,
                 .count = 0,
@@ -62,17 +62,17 @@ namespace RunLength
             throw std::runtime_error("Cannot allocate memory");
         }
 
-        return CpuCompressed{
+        return RLCompressed{
             .outputValues = outputValues,
             .outputCounts = outputCounts,
             .count = count};
     }
 
-    CpuDecompressed cpuDecompress(uint8_t *values, uint8_t *counts, size_t size)
+    RLDecompressed cpuDecompress(uint8_t *values, uint8_t *counts, size_t size)
     {
         if (size == 0)
         {
-            return CpuDecompressed{
+            return RLDecompressed{
                 .data = nullptr,
                 .size = 0};
         }
@@ -100,7 +100,7 @@ namespace RunLength
             }
         }
 
-        return CpuDecompressed{
+        return RLDecompressed{
             .data = data,
             .size = outputSize};
     }
