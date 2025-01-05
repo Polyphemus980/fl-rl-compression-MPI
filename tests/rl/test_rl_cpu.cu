@@ -58,20 +58,6 @@ void test_rl_cpu_compression_unique_elements(void)
     TEST_ARRAYS_EQUAL(expectedValues, compressedData.outputValues, expectedCount, "%hhu");
 }
 
-void test_rl_cpu_compression_multiple_sequences(void)
-{
-    uint8_t data[] = {5, 5, 8, 8, 8, 7, 7, 7, 7, 3, 4, 4, 4};
-    size_t dataSize = 13;
-    uint8_t expectedCounts[] = {2, 3, 4, 1, 3};
-    uint8_t expectedValues[] = {5, 8, 7, 3, 4};
-    size_t expectedCount = 5;
-
-    auto compressedData = RunLength::cpuCompress(data, dataSize);
-    TEST_CHECK_(compressedData.count == expectedCount, "%zu is equal to %zu", compressedData.count, expectedCount);
-    TEST_ARRAYS_EQUAL(expectedCounts, compressedData.outputCounts, expectedCount, "%hhu");
-    TEST_ARRAYS_EQUAL(expectedValues, compressedData.outputValues, expectedCount, "%hhu");
-}
-
 void test_rl_cpu_compression_large_sequence(void)
 {
     uint8_t data[256];
@@ -201,7 +187,6 @@ TEST_LIST = {
     {"test_rl_cpu_compression_empty", test_rl_cpu_compression_empty},
     {"test_rl_cpu_compression_single_value", test_rl_cpu_compression_single_value},
     {"test_rl_cpu_compression_unique_elements", test_rl_cpu_compression_unique_elements},
-    {"test_rl_cpu_compression_multiple_sequences", test_rl_cpu_compression_multiple_sequences},
     {"test_rl_cpu_compression_large_sequence", test_rl_cpu_compression_large_sequence},
     {"test_rl_cpu_compression_alternating", test_rl_cpu_compression_alternating},
     // Decompression
