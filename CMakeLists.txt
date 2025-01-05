@@ -17,3 +17,11 @@ add_executable(rl_cpu_tests tests/rl/test_rl_cpu.cu src/rl/rl_cpu.cu)
 target_compile_options(rl_cpu_tests PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-Xcudafe --diag_suppress=2949>)
 
 add_test(NAME rl_cpu_tests COMMAND rl_cpu_tests)
+
+
+add_executable(rl_gpu_tests tests/rl/test_rl_gpu.cu src/rl/rl_gpu.cu)
+
+# Disable specific warning for NVIDIA compiler - it's something about acutest not related to the project itself
+target_compile_options(rl_gpu_tests PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-Xcudafe --diag_suppress=2949>)
+
+add_test(NAME rl_gpu_tests COMMAND rl_gpu_tests)
