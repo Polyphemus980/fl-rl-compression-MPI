@@ -158,7 +158,7 @@ Kolejne kroki:
 
 5. Na koniec używamy przygotowanych tablic do obliczenia finalnego wyniku. Tworzymy threada dla każdego elementu tablicy `startIndices` i tworzymy tablicę output, poprzez (niech `i` - numer threada oraz `n` - liczba threadow);
    - jesli `i < n - 1` to `outputValues[i] = input[startIndices[i]]` oraz `outputCount[i] = startIndices[i + 1] - startIndices[i]`
-   - jeśli `i == n - 1` to `outputValues[n - 1] = input[startIndices[n-1]]` oraz `outputCount[n-1] = n - startIndices[n - 1]`
+   - jeśli `i == n - 1` to `outputValues[n - 1] = input[startIndices[n-1]]` oraz `outputCount[n-1] = input.Length - startIndices[n - 1]`
 
 ### Dekompresja
 
