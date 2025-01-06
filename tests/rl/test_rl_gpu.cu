@@ -123,6 +123,37 @@ void test_rl_gpu_compression_more_than_one_block(void)
     TEST_ARRAYS_EQUAL(expectedValues, compressedData.outputValues, expectedCount, "%hhu");
 }
 
+void test_rl_gpu_compression_huge_data(void)
+{
+    uint8_t data[5000000];
+    size_t dataSize = 5000000;
+    uint8_t current = 0;
+    for (size_t i = 1; i <= dataSize; i++)
+    {
+        data[i - 1] = current;
+        if (i % 100 == 0)
+        {
+            current++;
+            current %= 100;
+        }
+    }
+
+    uint8_t expectedCounts[50000];
+    uint8_t expectedValues[50000];
+    size_t expectedCount = 50000;
+
+    for (size_t i = 0; i < expectedCount; i++)
+    {
+        expectedCounts[i] = 100;
+        expectedValues[i] = (i % 100);
+    }
+
+    auto compressedData = RunLength::gpuCompress(data, dataSize);
+    TEST_CHECK_(compressedData.count == expectedCount, "%zu is equal to %zu", compressedData.count, expectedCount);
+    TEST_ARRAYS_EQUAL(expectedCounts, compressedData.outputCounts, expectedCount, "%hhu");
+    TEST_ARRAYS_EQUAL(expectedValues, compressedData.outputValues, expectedCount, "%hhu");
+}
+
 TEST_LIST = {
     // Compression
     {"test_rl_gpu_compression_implementation_plan_example", test_rl_gpu_compression_implementation_plan_example},
@@ -132,4 +163,5 @@ TEST_LIST = {
     {"test_rl_gpu_compression_unique_elements", test_rl_gpu_compression_unique_elements},
     // {"test_rl_gpu_compression_large_sequence", test_rl_gpu_compression_large_sequence},
     {"test_rl_gpu_compression_more_than_one_block", test_rl_gpu_compression_more_than_one_block},
+    {"test_rl_gpu_compression_huge_data", test_rl_gpu_compression_huge_data},
     {nullptr, nullptr}};
