@@ -72,7 +72,6 @@ void test_rl_gpu_compression_unique_elements(void)
     TEST_ARRAYS_EQUAL(expectedValues, compressedData.outputValues, expectedCount, "%hhu");
 }
 
-// TODO: add this test when it's implemented
 void test_rl_gpu_compression_large_sequence(void)
 {
     uint8_t data[256];
@@ -161,7 +160,7 @@ TEST_LIST = {
     {"test_rl_gpu_compression_single_value", test_rl_gpu_compression_single_value},
     {"test_rl_gpu_compression_single_sequence", test_rl_gpu_compression_single_sequence},
     {"test_rl_gpu_compression_unique_elements", test_rl_gpu_compression_unique_elements},
-    // {"test_rl_gpu_compression_large_sequence", test_rl_gpu_compression_large_sequence},
+    {"test_rl_gpu_compression_large_sequence", test_rl_gpu_compression_large_sequence},
     {"test_rl_gpu_compression_more_than_one_block", test_rl_gpu_compression_more_than_one_block},
     {"test_rl_gpu_compression_huge_data", test_rl_gpu_compression_huge_data},
     {nullptr, nullptr}};

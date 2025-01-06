@@ -73,7 +73,7 @@ namespace RunLength
         // Check if we need to recalculate some sequence due to size > 255
         const uint32_t checkForMoreSequencesThreadsCount = 1024;
         const uint32_t checkForMoreSequencesBlocksCount = ceil(outputSize * 1.0 / checkForMoreSequencesThreadsCount);
-        compressCheckForMoreSequences<<<checkForMoreSequencesBlocksCount, checkForMoreSequencesThreadsCount>>>(d_startIndices, d_startIndicesLength, d_recalculateSequence, d_shouldRecalculate);
+        compressCheckForMoreSequences<<<checkForMoreSequencesBlocksCount, checkForMoreSequencesThreadsCount>>>(d_startIndices, d_startIndicesLength, size, d_recalculateSequence, d_shouldRecalculate);
         CHECK_CUDA(cudaDeviceSynchronize());
         CHECK_CUDA(cudaGetLastError());
 
@@ -81,9 +81,42 @@ namespace RunLength
         uint32_t shouldRecalculate = 0;
         CHECK_CUDA(cudaMemcpy(&shouldRecalculate, d_shouldRecalculate, sizeof(uint32_t), cudaMemcpyDeviceToHost));
 
+        // FIXME: this part doesnt work
         if (shouldRecalculate != 0)
         {
-            // TODO: recalculate sequences
+            printf("here\n");
+
+            // Copy data to CPU needed for threads counts of next kernel
+            uint32_t lastRecalculateSequence;
+            CHECK_CUDA(cudaMemcpy(&lastRecalculateSequence, &d_recalculateSequence[outputSize - 1], sizeof(uint32_t), cudaMemcpyDeviceToHost));
+
+            // Prescan on `recalculateSequence`
+            compressRecalculateSequencePrescan(d_recalculateSequence, outputSize);
+
+            // Copy data to CPU needed for threads counts of next kernel
+            uint32_t lastRecalculateSequencePrescan;
+            CHECK_CUDA(cudaMemcpy(&lastRecalculateSequencePrescan, &d_recalculateSequence[outputSize - 1], sizeof(uint32_t), cudaMemcpyDeviceToHost));
+
+            // Recalculate start mask
+            const uint32_t recalculateStartMaskAllThreads = lastRecalculateSequence + lastRecalculateSequencePrescan;
+            const uint32_t recalculateStartMaskThreadsCount = 1024;
+            const uint32_t recalculateStartMaskBlocksCount = ceil(recalculateStartMaskAllThreads * 1.0 / recalculateStartMaskThreadsCount);
+            compressRecalculateStartMask<<<recalculateStartMaskBlocksCount, recalculateStartMaskThreadsCount>>>(d_startMask, recalculateStartMaskAllThreads, d_recalculateSequence, outputSize, d_startIndices);
+            CHECK_CUDA(cudaDeviceSynchronize());
+            CHECK_CUDA(cudaGetLastError());
+
+            // Do again points 2. and 3.
+            // Calculate scanned start mask
+            compressCalculateScannedStartMask(d_startMask, d_scannedStartMask, size);
+
+            // Calculate start indicies
+            compressCalculateStartIndicies<<<calculateStartIndiciesBlocksCount, calculateStartIndiciesThreadsCount>>>(d_scannedStartMask, size, d_startIndices, d_startIndicesLength);
+            CHECK_CUDA(cudaDeviceSynchronize());
+            CHECK_CUDA(cudaGetLastError());
+
+            // Copy to CPU final outputSize
+            uint32_t outputSize = 0;
+            CHECK_CUDA(cudaMemcpy(&outputSize, d_startIndicesLength, sizeof(uint32_t), cudaMemcpyDeviceToHost));
         }
 
         // Calculate final output
@@ -175,7 +208,7 @@ namespace RunLength
         }
     }
 
-    __global__ void compressCheckForMoreSequences(uint32_t *d_startIndicies, uint32_t *d_startIndiciesLength, uint32_t *d_recalculateSequence, uint32_t *d_shouldRecalculate)
+    __global__ void compressCheckForMoreSequences(uint32_t *d_startIndicies, uint32_t *d_startIndiciesLength, size_t size, uint32_t *d_recalculateSequence, uint32_t *d_shouldRecalculate)
     {
         __shared__ uint32_t s_shouldRecalculate[1];
         __shared__ uint32_t s_startIndiciesLength[1];
@@ -190,7 +223,20 @@ namespace RunLength
         }
         __syncthreads();
 
-        if (threadId < s_startIndiciesLength[0] - 1)
+        // Case when there is only one sequence
+        if (s_startIndiciesLength[0] == 1)
+        {
+            if (threadId == 0)
+            {
+                uint32_t diff = size;
+                if (diff > 255)
+                {
+                    d_recalculateSequence[0] = diff / 255;
+                    atomicOr(s_shouldRecalculate, 1);
+                }
+            }
+        }
+        else if (threadId < s_startIndiciesLength[0] - 1)
         {
             auto diff = d_startIndicies[threadId + 1] - d_startIndicies[threadId];
             if (diff > 255)
@@ -236,11 +282,56 @@ namespace RunLength
         }
     }
 
+    __global__ void compressRecalculateStartMask(uint32_t *d_startMask, uint32_t allThreads, uint32_t *d_recalculateSequence, size_t recalculateSequenceLength, uint32_t *d_startIndicies)
+    {
+        auto threadId = blockDim.x * blockIdx.x + threadIdx.x;
+        if (threadId < allThreads)
+        {
+            auto j = binarySearchInsideRange(d_recalculateSequence, recalculateSequenceLength, threadId);
+            auto k = threadId - d_recalculateSequence[j] + 1;
+            printf("updating index: %u\n", d_startIndicies[j] + k * 255);
+            d_startMask[d_startIndicies[j] + k * 255] = 1;
+        }
+    }
+
     // Helpers
 
     void compressCalculateScannedStartMask(uint32_t *d_startMask, uint32_t *d_scannedStartMask, size_t size)
     {
         thrust::inclusive_scan(thrust::device, d_startMask, d_startMask + size, d_scannedStartMask);
+    }
+
+    void compressRecalculateSequencePrescan(uint32_t *d_recalculateSequence, uint32_t size)
+    {
+        thrust::exclusive_scan(thrust::device, d_recalculateSequence, d_recalculateSequence + size, d_recalculateSequence);
+    }
+
+    __device__ size_t binarySearchInsideRange(uint32_t *d_arr, size_t size, uint32_t value)
+    {
+        size_t left = 0;
+        size_t right = size - 1;
+
+        while (left <= right)
+        {
+            size_t m = (left + right) / 2;
+            if (d_arr[m] <= value)
+            {
+                if (m == size - 1 || d_arr[m + 1] >= value)
+                {
+                    return m;
+                }
+            }
+            else if (d_arr[m] < value)
+            {
+                left = m + 1;
+            }
+            else if (d_arr[m] > value)
+            {
+                right = m - 1;
+            }
+        }
+
+        return size;
     }
 
 } // RunLength

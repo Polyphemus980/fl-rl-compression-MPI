@@ -3,6 +3,7 @@
         "*.h": "c",
         "*.cu": "cuda-cpp",
         "*.cuh": "cuda-cpp",
-        "stdexcept": "cpp"
+        "stdexcept": "cpp",
+        "chrono": "cpp"
     }
 }
