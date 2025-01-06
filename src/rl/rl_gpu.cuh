@@ -12,6 +12,7 @@ namespace RunLength
     // Kernels
     __global__ void compressCalculateStartMask(uint8_t *d_data, size_t size, uint32_t *d_startMask);
     __global__ void compressCalculateStartIndicies(uint32_t *d_scannedStartMask, size_t size, uint32_t *d_startIndicies, uint32_t *d_startIndiciesLength);
+    __global__ void compressCheckForMoreSequences(uint32_t *d_startIndicies, uint32_t *d_startIndiciesLength, uint32_t *d_recalculateSequence, uint32_t *d_shouldRecalculate);
     __global__ void compressCalculateOutput(uint8_t *d_data, size_t size, uint32_t *d_startIndicies, uint32_t *d_startIndiciesLength, uint8_t *d_outputValues, uint8_t *d_outputCounts);
 
     // Helpers

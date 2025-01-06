@@ -40,6 +40,13 @@ namespace RunLength
         CHECK_CUDA(cudaMalloc(&d_outputValues, sizeof(uint8_t) * size));
         uint8_t *d_outputCounts;
         CHECK_CUDA(cudaMalloc(&d_outputCounts, sizeof(uint8_t) * size));
+        // Same here, we could wait and allocate it later with exact size, but this way it's easier
+        // to handle errors.
+        uint32_t *d_recalculateSequence;
+        CHECK_CUDA(cudaMalloc(&d_recalculateSequence, sizeof(uint32_t) * size));
+        uint32_t *d_shouldRecalculate;
+        CHECK_CUDA(cudaMalloc(&d_shouldRecalculate, sizeof(uint32_t)));
+        CHECK_CUDA(cudaMemset(d_shouldRecalculate, 0, sizeof(uint32_t)));
 
         // Calculate start mask
         const uint32_t calculateStartMaskThreadsCount = 1024;
@@ -63,15 +70,28 @@ namespace RunLength
         uint32_t outputSize = 0;
         CHECK_CUDA(cudaMemcpy(&outputSize, d_startIndicesLength, sizeof(uint32_t), cudaMemcpyDeviceToHost));
 
-        // TODO: check if we need to recalculate some sequence due to size > 255
+        // Check if we need to recalculate some sequence due to size > 255
+        const uint32_t checkForMoreSequencesThreadsCount = 1024;
+        const uint32_t checkForMoreSequencesBlocksCount = ceil(outputSize * 1.0 / checkForMoreSequencesThreadsCount);
+        compressCheckForMoreSequences<<<checkForMoreSequencesBlocksCount, checkForMoreSequencesThreadsCount>>>(d_startIndices, d_startIndicesLength, d_recalculateSequence, d_shouldRecalculate);
+        CHECK_CUDA(cudaDeviceSynchronize());
+        CHECK_CUDA(cudaGetLastError());
+
+        // Copy to cpu boolean value to check if need to recalculate some sequences
+        uint32_t shouldRecalculate = 0;
+        CHECK_CUDA(cudaMemcpy(&shouldRecalculate, d_shouldRecalculate, sizeof(uint32_t), cudaMemcpyDeviceToHost));
+
+        if (shouldRecalculate != 0)
+        {
+            // TODO: recalculate sequences
+        }
 
         // Calculate final output
         const uint32_t calculateOutputThreadsCount = 1024;
         const uint32_t calculateOutputBlocksCount = ceil(outputSize * 1.0 / calculateOutputThreadsCount);
         compressCalculateOutput<<<calculateOutputBlocksCount, calculateOutputThreadsCount>>>(d_data, size, d_startIndices, d_startIndicesLength, d_outputValues, d_outputCounts);
-
-        // Wait for GPU to finish calculations
         CHECK_CUDA(cudaDeviceSynchronize());
+        CHECK_CUDA(cudaGetLastError());
 
         // Allocate needed cpu arrays
         uint8_t *outputValues = reinterpret_cast<uint8_t *>(malloc(sizeof(uint8_t) * outputSize));
@@ -152,6 +172,39 @@ namespace RunLength
         if (localThreadId == 0)
         {
             atomicMax(d_startIndiciesLength, s_maxLength[0]);
+        }
+    }
+
+    __global__ void compressCheckForMoreSequences(uint32_t *d_startIndicies, uint32_t *d_startIndiciesLength, uint32_t *d_recalculateSequence, uint32_t *d_shouldRecalculate)
+    {
+        __shared__ uint32_t s_shouldRecalculate[1];
+        __shared__ uint32_t s_startIndiciesLength[1];
+        auto threadId = blockDim.x * blockIdx.x + threadIdx.x;
+        auto localThreadId = threadIdx.x;
+
+        // Initialize shared memory
+        if (localThreadId == 0)
+        {
+            s_shouldRecalculate[0] = false;
+            s_startIndiciesLength[0] = d_startIndiciesLength[0];
+        }
+        __syncthreads();
+
+        if (threadId < s_startIndiciesLength[0] - 1)
+        {
+            auto diff = d_startIndicies[threadId + 1] - d_startIndicies[threadId];
+            if (diff > 255)
+            {
+                d_recalculateSequence[threadId] = diff / 255;
+                atomicOr(s_shouldRecalculate, 1);
+            }
+        }
+        __syncthreads();
+
+        // Save result from shared to global memory
+        if (localThreadId == 0)
+        {
+            atomicOr(d_shouldRecalculate, s_shouldRecalculate[0]);
         }
     }
 
