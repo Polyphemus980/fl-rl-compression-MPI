@@ -30,7 +30,6 @@ void test_rl_gpu_compression_empty(void)
     TEST_ARRAYS_EQUAL(expectedValues, compressedData.outputValues, expectedCount, "%hhu");
 }
 
-// FIXME: this two tests are not passing - gpuCompress is not working in case of single sequence in the output
 void test_rl_gpu_compression_single_value(void)
 {
     uint8_t data[] = {9};
@@ -128,8 +127,8 @@ TEST_LIST = {
     // Compression
     {"test_rl_gpu_compression_implementation_plan_example", test_rl_gpu_compression_implementation_plan_example},
     {"test_rl_gpu_compression_empty", test_rl_gpu_compression_empty},
-    // {"test_rl_gpu_compression_single_value", test_rl_gpu_compression_single_value},
-    // {"test_rl_gpu_compression_single_sequence", test_rl_gpu_compression_single_sequence},
+    {"test_rl_gpu_compression_single_value", test_rl_gpu_compression_single_value},
+    {"test_rl_gpu_compression_single_sequence", test_rl_gpu_compression_single_sequence},
     {"test_rl_gpu_compression_unique_elements", test_rl_gpu_compression_unique_elements},
     // {"test_rl_gpu_compression_large_sequence", test_rl_gpu_compression_large_sequence},
     {"test_rl_gpu_compression_more_than_one_block", test_rl_gpu_compression_more_than_one_block},

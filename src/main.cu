@@ -5,8 +5,8 @@
 int main(int argc, char **argv)
 {
 
-    uint8_t data[] = {5, 5, 8, 8, 8, 7, 7, 7, 7, 3, 4, 4, 4};
-    size_t dataSize = 13;
+    uint8_t data[] = {9, 9, 9, 9, 9};
+    size_t dataSize = 5;
 
     auto result = RunLength::gpuCompress(data, dataSize);
 

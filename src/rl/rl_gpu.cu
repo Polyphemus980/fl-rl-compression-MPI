@@ -130,7 +130,8 @@ namespace RunLength
         // Initialize shared memory
         if (localThreadId == 0)
         {
-            s_maxLength[0] = 0;
+            // It will always be at least 1, in case of length 0 we early return from main compress function
+            s_maxLength[0] = 1;
         }
         __syncthreads();
 
@@ -172,13 +173,13 @@ namespace RunLength
             d_outputValues[threadId] = d_data[d_startIndicies[threadId]];
         }
 
-        if (threadId < s_length[0] - 1)
-        {
-            d_outputCounts[threadId] = d_startIndicies[threadId + 1] - d_startIndicies[threadId];
-        }
-        else if (threadId == s_length[0] - 1)
+        if (threadId == s_length[0] - 1)
         {
             d_outputCounts[threadId] = (uint8_t)((uint32_t)size - d_startIndicies[threadId]);
+        }
+        else if (threadId < s_length[0] - 1)
+        {
+            d_outputCounts[threadId] = d_startIndicies[threadId + 1] - d_startIndicies[threadId];
         }
     }
 
