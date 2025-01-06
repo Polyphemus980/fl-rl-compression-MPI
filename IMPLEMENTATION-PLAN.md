@@ -134,11 +134,10 @@ Kolejne kroki:
 
    - utworzenie tablicy `recalculateSequence` o dlugości o `1` mniejszej niż dlugość `startIndices`
    - utworzenie zmiennej globalnej `bool shouldRecalcuate` (używając shared memory dla poprawy wydajności)
-   - odpalenie threada dla każdego elementu tablicy `startIndices`
-   - jeśli `startIndices[i + 1] - startIndices[i] > 255` (dla `i` różnego od `startIndices.Length - 1`) to zmieniamy flagę oznaczającą potrzebę poprawy na true (tzn ustawiamy `shouldRecalculate` na `true` za pomocą operacji atomicznej i dodatkowo ustawiamy `recalculateSequence[i] = (startIndices[i + 1] - startIndices[i]) / 255`).
+   - odpalenie threada dla każdego elementu tablicy `recalculateSequence`
+   - jeśli `startIndices[i + 1] - startIndices[i] > 255` to zmieniamy flagę oznaczającą potrzebę poprawy na true (tzn ustawiamy `shouldRecalculate` na `true` za pomocą operacji atomicznej i dodatkowo ustawiamy `recalculateSequence[i] = (startIndices[i + 1] - startIndices[i]) / 255`).
 
-   Zauważmy, że jeśli `shouldRecalculate = false` to możemy od razu przejść do ostatniego punktu i wykorzystać już utworzone thready, bo jest ich tyle samo ile jest ich w ostatnim punkcie, tym samym oszczedzając tworzenie nowego kernela.
-
+   Zauważmy, że jeśli `shouldRecalculate = false` to możemy od razu przejść do ostatniego punktu.
    W przeciwnym przypadku, musimy utworzyć dodatkowe sekwencje poprzez:
 
    - uruchomienie algorytmu `Prescan` na tablicy `recalculateSequence` i zapisanie wyniku w tablicy `recalculatePrescan`
