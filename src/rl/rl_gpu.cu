@@ -4,6 +4,8 @@
 
 #include "rl_gpu.cuh"
 #include "../utils.cuh"
+#include "../timers/cpu_timer.cuh"
+#include "../timers/gpu_timer.cuh"
 
 namespace RunLength
 {
@@ -19,10 +21,20 @@ namespace RunLength
                 .count = 0};
         }
 
+        Timers::CpuTimer cpuTimer;
+        Timers::GpuTimer gpuTimer;
+
+        gpuTimer.start();
+
         // Copy input data to GPU
         uint8_t *d_data;
         CHECK_CUDA(cudaMalloc(&d_data, sizeof(uint8_t) * size));
         CHECK_CUDA(cudaMemcpy(d_data, data, sizeof(uint8_t) * size, cudaMemcpyHostToDevice));
+
+        gpuTimer.end();
+        gpuTimer.printResult("Copy input data to GPU");
+
+        gpuTimer.start();
 
         // Prepare GPU arrays
         uint32_t *d_startMask;
@@ -48,6 +60,11 @@ namespace RunLength
         uint32_t *d_shouldRecalculate;
         CHECK_CUDA(cudaMalloc(&d_shouldRecalculate, sizeof(uint32_t)));
         CHECK_CUDA(cudaMemset(d_shouldRecalculate, 0, sizeof(uint32_t)));
+
+        gpuTimer.end();
+        gpuTimer.printResult("Allocate arrays on GPU");
+
+        gpuTimer.start();
 
         // Calculate start mask
         const uint32_t calculateStartMaskThreadsCount = 1024;
@@ -124,6 +141,11 @@ namespace RunLength
         CHECK_CUDA(cudaDeviceSynchronize());
         CHECK_CUDA(cudaGetLastError());
 
+        gpuTimer.end();
+        gpuTimer.printResult("Compress data");
+
+        cpuTimer.start();
+
         // Allocate needed cpu arrays
         uint8_t *outputValues = reinterpret_cast<uint8_t *>(malloc(sizeof(uint8_t) * outputSize));
         if (outputValues == nullptr)
@@ -136,9 +158,19 @@ namespace RunLength
             throw std::runtime_error("Cannot allocate memory");
         }
 
+        cpuTimer.end();
+        cpuTimer.printResult("Allocate arrays on CPU");
+
+        gpuTimer.start();
+
         // Copy results to CPU
         CHECK_CUDA(cudaMemcpy(outputValues, d_outputValues, sizeof(uint8_t) * outputSize, cudaMemcpyDeviceToHost));
         CHECK_CUDA(cudaMemcpy(outputCounts, d_outputCounts, sizeof(uint8_t) * outputSize, cudaMemcpyDeviceToHost));
+
+        gpuTimer.end();
+        gpuTimer.printResult("Copy results to CPU");
+
+        gpuTimer.start();
 
         // Deallocate GPU arrays
         cudaFree(d_data);
@@ -148,6 +180,9 @@ namespace RunLength
         cudaFree(d_startIndicesLength);
         cudaFree(d_outputValues);
         cudaFree(d_outputCounts);
+
+        gpuTimer.end();
+        gpuTimer.printResult("Deallocate GPU array");
 
         return RLCompressed{
             .outputValues = outputValues,
