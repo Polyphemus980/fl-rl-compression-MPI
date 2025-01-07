@@ -81,11 +81,8 @@ namespace RunLength
         uint32_t shouldRecalculate = 0;
         CHECK_CUDA(cudaMemcpy(&shouldRecalculate, d_shouldRecalculate, sizeof(uint32_t), cudaMemcpyDeviceToHost));
 
-        // FIXME: this part doesnt work
         if (shouldRecalculate != 0)
         {
-            printf("here\n");
-
             // Copy data to CPU needed for threads counts of next kernel
             uint32_t lastRecalculateSequence;
             CHECK_CUDA(cudaMemcpy(&lastRecalculateSequence, &d_recalculateSequence[outputSize - 1], sizeof(uint32_t), cudaMemcpyDeviceToHost));
@@ -105,7 +102,7 @@ namespace RunLength
             CHECK_CUDA(cudaDeviceSynchronize());
             CHECK_CUDA(cudaGetLastError());
 
-            // Do again points 2. and 3.
+            // Do points 2. and 3. again
             // Calculate scanned start mask
             compressCalculateScannedStartMask(d_startMask, d_scannedStartMask, size);
 
@@ -115,7 +112,7 @@ namespace RunLength
             CHECK_CUDA(cudaGetLastError());
 
             // Copy to CPU final outputSize
-            uint32_t outputSize = 0;
+            outputSize = 0;
             CHECK_CUDA(cudaMemcpy(&outputSize, d_startIndicesLength, sizeof(uint32_t), cudaMemcpyDeviceToHost));
         }
 
@@ -289,7 +286,6 @@ namespace RunLength
         {
             auto j = binarySearchInsideRange(d_recalculateSequence, recalculateSequenceLength, threadId);
             auto k = threadId - d_recalculateSequence[j] + 1;
-            printf("updating index: %u\n", d_startIndicies[j] + k * 255);
             d_startMask[d_startIndicies[j] + k * 255] = 1;
         }
     }

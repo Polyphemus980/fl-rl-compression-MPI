@@ -92,6 +92,49 @@ void test_rl_gpu_compression_large_sequence(void)
     TEST_ARRAYS_EQUAL(expectedValues, compressedData.outputValues, expectedCount, "%hhu");
 }
 
+void test_rl_gpu_compression_large_sequence_2(void)
+{
+    uint8_t data[2550];
+    size_t dataSize = 2550;
+
+    for (size_t i = 0; i < dataSize; ++i)
+    {
+        data[i] = 100;
+    }
+
+    uint8_t expectedCounts[] = {255, 255, 255, 255, 255, 255, 255, 255, 255, 255};
+    uint8_t expectedValues[] = {100, 100, 100, 100, 100, 100, 100, 100, 100, 100};
+    size_t expectedCount = 10;
+
+    auto compressedData = RunLength::gpuCompress(data, dataSize);
+    TEST_CHECK_(compressedData.count == expectedCount, "%zu is equal to %zu", compressedData.count, expectedCount);
+    TEST_ARRAYS_EQUAL(expectedCounts, compressedData.outputCounts, expectedCount, "%hhu");
+    TEST_ARRAYS_EQUAL(expectedValues, compressedData.outputValues, expectedCount, "%hhu");
+}
+
+void test_rl_gpu_compression_large_sequence_3(void)
+{
+    uint8_t data[512];
+    size_t dataSize = 512;
+
+    data[0] = 0;
+    for (size_t i = 0; i < 510; i++)
+    {
+        data[i + 1] = 1;
+    }
+
+    data[511] = 2;
+
+    uint8_t expectedCounts[] = {1, 255, 255, 1};
+    uint8_t expectedValues[] = {0, 1, 1, 2};
+    size_t expectedCount = 4;
+
+    auto compressedData = RunLength::gpuCompress(data, dataSize);
+    TEST_CHECK_(compressedData.count == expectedCount, "%zu is equal to %zu", compressedData.count, expectedCount);
+    TEST_ARRAYS_EQUAL(expectedCounts, compressedData.outputCounts, expectedCount, "%hhu");
+    TEST_ARRAYS_EQUAL(expectedValues, compressedData.outputValues, expectedCount, "%hhu");
+}
+
 void test_rl_gpu_compression_more_than_one_block(void)
 {
     uint8_t data[5000];
@@ -161,6 +204,8 @@ TEST_LIST = {
     {"test_rl_gpu_compression_single_sequence", test_rl_gpu_compression_single_sequence},
     {"test_rl_gpu_compression_unique_elements", test_rl_gpu_compression_unique_elements},
     {"test_rl_gpu_compression_large_sequence", test_rl_gpu_compression_large_sequence},
+    {"test_rl_gpu_compression_large_sequence_2", test_rl_gpu_compression_large_sequence_2},
+    {"test_rl_gpu_compression_large_sequence_3", test_rl_gpu_compression_large_sequence_3},
     {"test_rl_gpu_compression_more_than_one_block", test_rl_gpu_compression_more_than_one_block},
     {"test_rl_gpu_compression_huge_data", test_rl_gpu_compression_huge_data},
     {nullptr, nullptr}};
