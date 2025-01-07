@@ -157,7 +157,79 @@ namespace RunLength
 
     RLDecompressed gpuDecompress(uint8_t *values, uint8_t *counts, size_t size)
     {
-        // TODO:
+        if (size == 0)
+        {
+            return RLDecompressed{
+                .data = nullptr,
+                .size = 0};
+        }
+
+        // Copy input data to GPU
+        uint8_t *d_values;
+        CHECK_CUDA(cudaMalloc(&d_values, sizeof(uint8_t) * size));
+        CHECK_CUDA(cudaMemcpy(d_values, values, sizeof(uint8_t) * size, cudaMemcpyHostToDevice));
+
+        uint8_t *d_counts;
+        CHECK_CUDA(cudaMalloc(&d_counts, sizeof(uint8_t) * size));
+        CHECK_CUDA(cudaMemcpy(d_counts, counts, sizeof(uint8_t) * size, cudaMemcpyHostToDevice));
+
+        printf("data copied\n");
+
+        // Prepare GPU arrays
+        uint32_t *d_startIndicies;
+        CHECK_CUDA(cudaMalloc(&d_startIndicies, sizeof(uint32_t) * size));
+
+        // Calculate startIndicies
+        decompressCalculateStartIndicies(d_counts, size, d_startIndicies);
+
+        printf("startIndicies calculated\n");
+
+        // Calculate final output length
+        uint32_t startIndiciesLast;
+        CHECK_CUDA(cudaMemcpy(&startIndiciesLast, &d_startIndicies[size - 1], sizeof(uint32_t), cudaMemcpyDeviceToHost));
+        size_t outputSize = startIndiciesLast + counts[size - 1];
+
+        printf("last start indicies: %u\n", startIndiciesLast);
+        printf("final output size: %d\n", outputSize);
+
+        // Allocate GPU array for final output
+        uint8_t *d_data;
+        CHECK_CUDA(cudaMalloc(&d_data, sizeof(uint8_t) * outputSize));
+
+        printf("allocated gpu for final output\n");
+
+        // Calculate final output
+        const uint32_t calculateOutputThreadsCount = 1024;
+        const uint32_t calculateOutputBlocksCount = ceil(outputSize * 1.0 / calculateOutputThreadsCount);
+        decompressCalculateOutput<<<calculateOutputBlocksCount, calculateOutputThreadsCount>>>(d_values, size, d_startIndicies, outputSize, d_data);
+        CHECK_CUDA(cudaDeviceSynchronize());
+        CHECK_CUDA(cudaGetLastError());
+
+        printf("final output calculated\n");
+
+        // Allocate CPU array
+        uint8_t *data = reinterpret_cast<uint8_t *>(malloc(sizeof(uint8_t) * outputSize));
+        if (data == nullptr)
+        {
+            throw std::runtime_error("Cannot allocate memory");
+        }
+
+        printf("cpu allocated\n");
+
+        // Copy result to CPU
+        CHECK_CUDA(cudaMemcpy(data, d_data, sizeof(uint8_t) * outputSize, cudaMemcpyDeviceToHost));
+
+        printf("result copied\n");
+
+        // Deallocate GPU arrays
+        cudaFree(d_values);
+        cudaFree(d_counts);
+
+        printf("gpu deallocated\n");
+
+        return RLDecompressed{
+            .data = data,
+            .size = outputSize};
     }
 
     // Kernels
@@ -290,6 +362,18 @@ namespace RunLength
         }
     }
 
+    __global__ void decompressCalculateOutput(uint8_t *d_values, size_t size, uint32_t *d_startIndicies, size_t threadsCount, uint8_t *d_data)
+    {
+        auto threadId = blockDim.x * blockIdx.x + threadIdx.x;
+        if (threadId < threadsCount)
+        {
+            printf("trying to find index for thread %u\n", threadId);
+            auto j = binarySearchInsideRange(d_startIndicies, size, threadId);
+            printf("[%u]: index found: %llu\n", threadId, j);
+            d_data[threadId] = d_values[j];
+        }
+    }
+
     // Helpers
 
     void compressCalculateScannedStartMask(uint32_t *d_startMask, uint32_t *d_scannedStartMask, size_t size)
@@ -302,6 +386,11 @@ namespace RunLength
         thrust::exclusive_scan(thrust::device, d_recalculateSequence, d_recalculateSequence + size, d_recalculateSequence);
     }
 
+    void decompressCalculateStartIndicies(uint8_t *d_counts, size_t size, uint32_t *d_startIndicies)
+    {
+        thrust::exclusive_scan(thrust::device, d_counts, d_counts + size, d_startIndicies);
+    }
+
     __device__ size_t binarySearchInsideRange(uint32_t *d_arr, size_t size, uint32_t value)
     {
         size_t left = 0;
@@ -312,12 +401,13 @@ namespace RunLength
             size_t m = (left + right) / 2;
             if (d_arr[m] <= value)
             {
-                if (m == size - 1 || d_arr[m + 1] >= value)
+                if (m == size - 1 || d_arr[m + 1] > value)
                 {
                     return m;
                 }
             }
-            else if (d_arr[m] < value)
+
+            if (d_arr[m] < value)
             {
                 left = m + 1;
             }
