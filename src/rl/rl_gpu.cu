@@ -1,4 +1,5 @@
 #include <thrust/execution_policy.h>
+#include <thrust/functional.h>
 #include <thrust/scan.h>
 
 #include "rl_gpu.cuh"
@@ -173,8 +174,6 @@ namespace RunLength
         CHECK_CUDA(cudaMalloc(&d_counts, sizeof(uint8_t) * size));
         CHECK_CUDA(cudaMemcpy(d_counts, counts, sizeof(uint8_t) * size, cudaMemcpyHostToDevice));
 
-        printf("data copied\n");
-
         // Prepare GPU arrays
         uint32_t *d_startIndicies;
         CHECK_CUDA(cudaMalloc(&d_startIndicies, sizeof(uint32_t) * size));
@@ -182,21 +181,14 @@ namespace RunLength
         // Calculate startIndicies
         decompressCalculateStartIndicies(d_counts, size, d_startIndicies);
 
-        printf("startIndicies calculated\n");
-
         // Calculate final output length
         uint32_t startIndiciesLast;
         CHECK_CUDA(cudaMemcpy(&startIndiciesLast, &d_startIndicies[size - 1], sizeof(uint32_t), cudaMemcpyDeviceToHost));
         size_t outputSize = startIndiciesLast + counts[size - 1];
 
-        printf("last start indicies: %u\n", startIndiciesLast);
-        printf("final output size: %d\n", outputSize);
-
         // Allocate GPU array for final output
         uint8_t *d_data;
         CHECK_CUDA(cudaMalloc(&d_data, sizeof(uint8_t) * outputSize));
-
-        printf("allocated gpu for final output\n");
 
         // Calculate final output
         const uint32_t calculateOutputThreadsCount = 1024;
@@ -205,8 +197,6 @@ namespace RunLength
         CHECK_CUDA(cudaDeviceSynchronize());
         CHECK_CUDA(cudaGetLastError());
 
-        printf("final output calculated\n");
-
         // Allocate CPU array
         uint8_t *data = reinterpret_cast<uint8_t *>(malloc(sizeof(uint8_t) * outputSize));
         if (data == nullptr)
@@ -214,18 +204,12 @@ namespace RunLength
             throw std::runtime_error("Cannot allocate memory");
         }
 
-        printf("cpu allocated\n");
-
         // Copy result to CPU
         CHECK_CUDA(cudaMemcpy(data, d_data, sizeof(uint8_t) * outputSize, cudaMemcpyDeviceToHost));
-
-        printf("result copied\n");
 
         // Deallocate GPU arrays
         cudaFree(d_values);
         cudaFree(d_counts);
-
-        printf("gpu deallocated\n");
 
         return RLDecompressed{
             .data = data,
@@ -367,9 +351,7 @@ namespace RunLength
         auto threadId = blockDim.x * blockIdx.x + threadIdx.x;
         if (threadId < threadsCount)
         {
-            printf("trying to find index for thread %u\n", threadId);
             auto j = binarySearchInsideRange(d_startIndicies, size, threadId);
-            printf("[%u]: index found: %llu\n", threadId, j);
             d_data[threadId] = d_values[j];
         }
     }
@@ -388,7 +370,7 @@ namespace RunLength
 
     void decompressCalculateStartIndicies(uint8_t *d_counts, size_t size, uint32_t *d_startIndicies)
     {
-        thrust::exclusive_scan(thrust::device, d_counts, d_counts + size, d_startIndicies);
+        thrust::exclusive_scan(thrust::device, d_counts, d_counts + size, d_startIndicies, 0, thrust::plus<uint32_t>());
     }
 
     __device__ size_t binarySearchInsideRange(uint32_t *d_arr, size_t size, uint32_t value)
@@ -399,6 +381,11 @@ namespace RunLength
         while (left <= right)
         {
             size_t m = (left + right) / 2;
+
+            if (d_arr[m] == value)
+            {
+                return m;
+            }
             if (d_arr[m] <= value)
             {
                 if (m == size - 1 || d_arr[m + 1] > value)

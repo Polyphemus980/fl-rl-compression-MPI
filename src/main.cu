@@ -32,16 +32,18 @@ int main(int argc, char **argv)
     //     printf("%hhu - %hhu\n", result.outputValues[i], result.outputCounts[i]);
     // }
 
-    uint8_t counts[] = {2, 3, 4, 1, 3};
-    uint8_t values[] = {5, 8, 7, 3, 4};
-    size_t size = 5;
+    uint8_t counts[] = {255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255};
+    uint8_t values[] = {100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100};
+    size_t size = 16;
 
     auto decompressed = RunLength::gpuDecompress(values, counts, size);
 
-    for (size_t i = 0; i < decompressed.size; i++)
-    {
-        printf("%hhu\n", decompressed.data[i]);
-    }
+    printf("decompressed size: %llu\n", decompressed.size);
+
+    // for (size_t i = 0; i < decompressed.size; i++)
+    // {
+    //     printf("%hhu\n", decompressed.data[i]);
+    // }
 
     return 0;
 }
