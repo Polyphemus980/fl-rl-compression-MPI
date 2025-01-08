@@ -1,6 +1,7 @@
 #include <stdexcept>
 
 #include "rl_cpu.cuh"
+#include "../timers/cpu_timer.cuh"
 
 namespace RunLength
 {
@@ -15,6 +16,10 @@ namespace RunLength
             };
         }
 
+        Timers::CpuTimer cpuTimer;
+
+        cpuTimer.start();
+
         // Allocations
         uint8_t *outputValues = reinterpret_cast<uint8_t *>(malloc(sizeof(uint8_t) * size));
         if (outputValues == nullptr)
@@ -28,6 +33,11 @@ namespace RunLength
             throw std::runtime_error("Cannot allocate memory");
         }
         size_t count = 0;
+
+        cpuTimer.end();
+        cpuTimer.printResult("Allocate arrays on CPU");
+
+        cpuTimer.start();
 
         // Compression
         uint8_t currentCount = 1;
@@ -46,6 +56,11 @@ namespace RunLength
         outputCounts[count] = currentCount;
         count++;
 
+        cpuTimer.end();
+        cpuTimer.printResult("Compression");
+
+        cpuTimer.start();
+
         // Reallocate memory to only use as much as needed
         uint8_t *tempValues = reinterpret_cast<uint8_t *>(realloc(outputValues, sizeof(uint8_t) * count));
         if (tempValues == nullptr)
@@ -62,6 +77,9 @@ namespace RunLength
             throw std::runtime_error("Cannot allocate memory");
         }
 
+        cpuTimer.end();
+        cpuTimer.printResult("Reallocate arrays on CPU");
+
         return RLCompressed{
             .outputValues = outputValues,
             .outputCounts = outputCounts,
@@ -76,6 +94,10 @@ namespace RunLength
                 .data = nullptr,
                 .size = 0};
         }
+
+        Timers::CpuTimer cpuTimer;
+
+        cpuTimer.start();
 
         size_t outputSize = 0;
         for (size_t i = 0; i < size; i++)
@@ -99,6 +121,9 @@ namespace RunLength
                 data[global_id++] = values[i];
             }
         }
+
+        cpuTimer.end();
+        cpuTimer.printResult("Decompression");
 
         return RLDecompressed{
             .data = data,

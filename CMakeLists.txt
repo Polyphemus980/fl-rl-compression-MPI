@@ -11,7 +11,7 @@ add_executable(FlRlCompression src/main.cu src/rl/rl_cpu.cu src/rl/rl_gpu.cu src
 
 enable_testing()
 
-add_executable(rl_cpu_tests tests/rl/test_rl_cpu.cu src/rl/rl_cpu.cu)
+add_executable(rl_cpu_tests tests/rl/test_rl_cpu.cu src/rl/rl_cpu.cu src/timers/cpu_timer.cu)
 
 # Disable specific warning for NVIDIA compiler - it's something about acutest not related to the project itself
 target_compile_options(rl_cpu_tests PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-Xcudafe --diag_suppress=2949>)
