@@ -6,7 +6,7 @@
 namespace FixedLength
 {
     // Number of bytes per frame
-    static constexpr size_t FRAME_LENGTH = 16;
+    static constexpr size_t FRAME_LENGTH = 128;
 
     struct FLCompressed
     {

@@ -5,45 +5,66 @@
 
 #include "./rl/rl_cpu.cuh"
 #include "./rl/rl_gpu.cuh"
+#include "./fl/fl_cpu.cuh"
 
 int main(int argc, char **argv)
 {
-    // auto start = std::chrono::high_resolution_clock::now();
-
-    // uint8_t data[256];
-    // size_t dataSize = 256;
-
-    // for (size_t i = 0; i < dataSize; ++i)
+    // uint8_t data[5000000];
+    // size_t dataSize = 5000000;
+    // uint8_t current = 0;
+    // for (size_t i = 1; i <= dataSize; i++)
     // {
-    //     data[i] = 100;
+    //     data[i - 1] = current;
+    //     if (i % 100 == 0)
+    //     {
+    //         current++;
+    //         current %= 100;
+    //     }
     // }
+
+    // constexpr size_t dataSize = 500000000;
+    // uint8_t *data = reinterpret_cast<uint8_t *>(malloc(sizeof(uint8_t) * dataSize));
 
     // auto result = RunLength::gpuCompress(data, dataSize);
-    // // auto result = RunLength::cpuCompress(data, dataSize);
+    // auto result = RunLength::cpuCompress(data, dataSize);
 
-    // auto end = std::chrono::high_resolution_clock::now();
+    // printf("size: %llu\n", result.count);
 
-    // auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    // auto final = RunLength::gpuDecompress(result.outputValues, result.outputCounts, result.count);
+    // auto final = RunLength::cpuDecompress(result.outputValues, result.outputCounts, result.count);
 
-    // std::cout << "Time taken for all: " << duration.count() << " ms" << std::endl;
+    // printf("final size: %llu\n", final.size);
 
-    // for (size_t i = 0; i < result.count; i++)
-    // {
-    //     printf("%hhu - %hhu\n", result.outputValues[i], result.outputCounts[i]);
-    // }
+    // uint8_t counts[] = {255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255};
+    // uint8_t values[] = {100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100};
+    // size_t size = 16;
 
-    uint8_t counts[] = {255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255};
-    uint8_t values[] = {100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100};
-    size_t size = 16;
+    // auto decompressed = RunLength::gpuDecompress(values, counts, size);
 
-    auto decompressed = RunLength::gpuDecompress(values, counts, size);
-
-    printf("decompressed size: %llu\n", decompressed.size);
+    // printf("decompressed size: %llu\n", decompressed.size);
 
     // for (size_t i = 0; i < decompressed.size; i++)
     // {
     //     printf("%hhu\n", decompressed.data[i]);
     // }
+
+    uint8_t data[130];
+    for (size_t i = 0; i < 130; i++)
+    {
+        data[i] = i % 4;
+    }
+    size_t size = 130;
+
+    printf("startign\n");
+
+    auto result = FixedLength::cpuCompress(data, size);
+
+    printf("bits size: %llu, values size: %llu\n", result.bitsSize, result.valuesSize);
+
+    for (size_t i = 0; i < result.valuesSize; i++)
+    {
+        printf("%b\n", result.outputValues[i]);
+    }
 
     return 0;
 }
