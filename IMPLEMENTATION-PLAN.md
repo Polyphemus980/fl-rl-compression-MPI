@@ -15,6 +15,9 @@ Posłużymy się prostym przykładem do wizualizacji sposobu:
 Zakładamy, że w tym przypadku frame ma wielkość 3 (w finalnym projekcie będzie to albo wartość możliwa do ustawienia podczas uruchomienia programu, albo inna większa wartość).
 `outputBits` oznacza liczbę bitów potrzebną do zakodowania danych w framie, `outputValues` zawiera dane już zakodowane, gdzie kodowanie w naszym przypadku to po prostu ucinanie nieznaczących zer. W przykładowym outpucie `---` oznacza przejście do nowego frame'a (jest ono wprowadzone tylko w celu łatwiejszego odczytania przykładu). Dodatkowo, zapis binarny wyniku nie jest w takiej postaci, w jakiej będzie to faktycznie zapisane w pamięci - jest to raczej przedstawienie, w jaki sposób chcemy daną liczbę zakodować. Nie przedstawiam faktycznego obrazu pamięci jako, że uważam, ze zaciemni to jedynie obraz i ogólny koncept algorytmu.
 
+// TODO: przepisac te czesc, uzywajac zamiast tego thrust::maxa shared memory i robic atomicMaxa
+// TODO: probably also need to use uint8_t instead of uint32_t
+
 1. Tworzymy tablicę `requiredBits` o dlugości `n`, gdzie `n` to długość tablicy `input`, która będzie zawierała informację o tym, ile bitów jest potrzebnych do zapisania danej wartości. W naszym przypadku to będzie:
 
    ```
@@ -46,8 +49,10 @@ Zakładamy, że w tym przypadku frame ma wielkość 3 (w finalnym projekcie będ
    - obliczamy `outputId = bitsOffset / 32` (dzielimy przez 32, bo obliczone wartości są w bitach, a my mamy tablicę intów).
    - obliczamy `outputOffset = bitsOffset % 32` (jest to offset wewnątrz inta)
    - obliczamy `mask = (1 << requiredBits) - 1`
+      // TODO: this mask here is probably not heeded
    - obliczamy `encodedValue = (input[i] & mask) << outputOffset`
    - zapisujemy wynik `atomicOr(output[outputId], encodedValue)`
+      // TODO: is this mask here needed? isn't it actually a mistake?
    - Dodatkowo musimy rozpatrzeć przypadek, gdy wartość będzie rozbita na dwa sąsiadujące inty (czyli kiedy `outputOffset + requiredBits > 32`) - wtedy obliczamy `overflowValue = (encodedValue & mask) >> (32 - outputOffset)`
      i zapisujemy wynik w kolejnym elemencie poprzez `atomicOr(output[outputId + 1], overflowValue)`
 
