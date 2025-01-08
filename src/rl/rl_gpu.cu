@@ -200,6 +200,11 @@ namespace RunLength
                 .size = 0};
         }
 
+        Timers::CpuTimer cpuTimer;
+        Timers::GpuTimer gpuTimer;
+
+        gpuTimer.start();
+
         // Copy input data to GPU
         uint8_t *d_values;
         CHECK_CUDA(cudaMalloc(&d_values, sizeof(uint8_t) * size));
@@ -209,9 +214,19 @@ namespace RunLength
         CHECK_CUDA(cudaMalloc(&d_counts, sizeof(uint8_t) * size));
         CHECK_CUDA(cudaMemcpy(d_counts, counts, sizeof(uint8_t) * size, cudaMemcpyHostToDevice));
 
+        gpuTimer.end();
+        gpuTimer.printResult("Copy input data to GPU");
+
+        gpuTimer.start();
+
         // Prepare GPU arrays
         uint32_t *d_startIndicies;
         CHECK_CUDA(cudaMalloc(&d_startIndicies, sizeof(uint32_t) * size));
+
+        gpuTimer.end();
+        gpuTimer.printResult("Allocate arrays on GPU");
+
+        gpuTimer.start();
 
         // Calculate startIndicies
         decompressCalculateStartIndicies(d_counts, size, d_startIndicies);
@@ -232,6 +247,11 @@ namespace RunLength
         CHECK_CUDA(cudaDeviceSynchronize());
         CHECK_CUDA(cudaGetLastError());
 
+        gpuTimer.end();
+        gpuTimer.printResult("Decompress data");
+
+        cpuTimer.start();
+
         // Allocate CPU array
         uint8_t *data = reinterpret_cast<uint8_t *>(malloc(sizeof(uint8_t) * outputSize));
         if (data == nullptr)
@@ -239,12 +259,25 @@ namespace RunLength
             throw std::runtime_error("Cannot allocate memory");
         }
 
+        cpuTimer.end();
+        cpuTimer.printResult("Allocate arrays on CPU");
+
+        gpuTimer.start();
+
         // Copy result to CPU
         CHECK_CUDA(cudaMemcpy(data, d_data, sizeof(uint8_t) * outputSize, cudaMemcpyDeviceToHost));
+
+        gpuTimer.end();
+        gpuTimer.printResult("Copy result to CPU");
+
+        gpuTimer.start();
 
         // Deallocate GPU arrays
         cudaFree(d_values);
         cudaFree(d_counts);
+
+        gpuTimer.end();
+        gpuTimer.printResult("Deallocate GPU arrays");
 
         return RLDecompressed{
             .data = data,
