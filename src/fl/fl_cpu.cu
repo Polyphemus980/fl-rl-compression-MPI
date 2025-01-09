@@ -13,7 +13,8 @@ namespace FixedLength
                 .outputBits = nullptr,
                 .bitsSize = 0,
                 .outputValues = nullptr,
-                .valuesSize = 0};
+                .valuesSize = 0,
+                .inputSize = 0};
         }
 
         // Allocate bits array
@@ -76,10 +77,11 @@ namespace FixedLength
             .outputBits = outputBits,
             .bitsSize = framesCount,
             .outputValues = outputValues,
-            .valuesSize = valuesSize};
+            .valuesSize = valuesSize,
+            .inputSize = size};
     }
 
-    FLDecompressed cpuDecompress(uint8_t *bits, size_t bitsSize, uint8_t *values, size_t valuesSize)
+    FLDecompressed cpuDecompress(size_t outputSize, uint8_t *bits, size_t bitsSize, uint8_t *values, size_t valuesSize)
     {
         if (valuesSize == 0 || bitsSize == 0)
         {
@@ -88,7 +90,44 @@ namespace FixedLength
                 .size = 0};
         }
 
-        // TODO:
+        // Allocate needed data
+        uint8_t *data = reinterpret_cast<uint8_t *>(malloc(sizeof(uint8_t) * outputSize));
+        if (data == nullptr)
+        {
+            throw std::runtime_error("Cannot allocate memory\n");
+        }
+
+        // Decompression
+        size_t consumedBits = 0;
+        for (size_t f = 0; f < bitsSize; f++)
+        {
+            uint8_t usedBits = bits[f];
+            for (size_t i = 0; i < FRAME_LENGTH && (f * FRAME_LENGTH + i) < outputSize; i++)
+            {
+                size_t outputId = f * FRAME_LENGTH + i;
+                size_t inputId = consumedBits / 8;
+                uint8_t inputOffset = consumedBits % 8;
+                uint8_t mask = (1 << usedBits) - 1;
+
+                // Decode value
+                uint8_t decodedValue = (values[inputId] >> inputOffset) & mask;
+                // If there was overflow when encoding we must take the other part of the number
+                if (inputOffset + usedBits > 8)
+                {
+                    uint8_t overflowBits = inputOffset + usedBits - 8;
+                    uint8_t overflowMask = (1 << overflowBits) - 1;
+                    uint8_t overflowValue = (values[inputId + 1] & overflowMask) << (usedBits - overflowBits);
+                    decodedValue |= overflowValue;
+                }
+
+                data[outputId] = decodedValue;
+                consumedBits += usedBits;
+            }
+        }
+
+        return FLDecompressed{
+            .data = data,
+            .size = outputSize};
     }
 
     uint8_t countLeadingZeroes(uint8_t value)

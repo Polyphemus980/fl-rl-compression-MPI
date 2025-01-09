@@ -14,6 +14,7 @@ namespace FixedLength
         size_t bitsSize;
         uint8_t *outputValues;
         size_t valuesSize;
+        size_t inputSize;
     };
 
     struct FLDecompressed

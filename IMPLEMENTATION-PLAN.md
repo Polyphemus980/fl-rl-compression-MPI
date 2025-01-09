@@ -71,6 +71,7 @@ Posłużymy się prostym przykładem do wizualizacji sposobu:
 Kolejne kroki:
 
 1. Tworzymy tablicę `frameStartIndices` (tak samo jak w pkt.3 kompresji Fixed-length, z tą różnicą, że używamy `inputBits` zamiast `outputBits`).
+// TODO: dlugosc outputut trzeba dac jako parametr
 2. Tworzymy tablicę `output`, która będzie miała długość `frameLength * inputBits.Length` (bo każdy frame ma `frameLength` elementów, a framów jest tyle samo, co elementów w tablicy `inputBits`).
 3. Uruchamiamy `n` threadów, gdzie `n` to długość tablicy `output`. Dla threada o indeksie `i` wykonujemy następujące operacje:
 
