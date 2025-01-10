@@ -2,6 +2,7 @@
 #include <stdexcept>
 
 #include "fl_cpu.cuh"
+#include "../timers/cpu_timer.cuh"
 
 namespace FixedLength
 {
@@ -17,6 +18,10 @@ namespace FixedLength
                 .inputSize = 0};
         }
 
+        Timers::CpuTimer cpuTimer;
+
+        cpuTimer.start();
+
         // Allocate bits array
         const size_t framesCount = ceil(size * 1.0 / FRAME_LENGTH);
 
@@ -26,6 +31,11 @@ namespace FixedLength
         {
             throw std::runtime_error("Cannot allocate memory\n");
         }
+
+        cpuTimer.end();
+        cpuTimer.printResult("Allocate an array on CPU");
+
+        cpuTimer.start();
 
         // Calculate outputBits
         size_t totalBitsRequired = 0;
@@ -48,6 +58,11 @@ namespace FixedLength
         const size_t valuesSize = ceil(totalBitsRequired * 1.0 / 8);
         uint8_t *outputValues = reinterpret_cast<uint8_t *>(malloc(sizeof(uint8_t) * valuesSize));
         memset(outputValues, 0, sizeof(uint8_t) * valuesSize);
+
+        cpuTimer.end();
+        cpuTimer.printResult("Calculate required bits + allocate output array");
+
+        cpuTimer.start();
 
         // Compression
         size_t usedBits = 0;
@@ -73,6 +88,9 @@ namespace FixedLength
             }
         }
 
+        cpuTimer.end();
+        cpuTimer.printResult("Compression");
+
         return FLCompressed{
             .outputBits = outputBits,
             .bitsSize = framesCount,
@@ -90,12 +108,21 @@ namespace FixedLength
                 .size = 0};
         }
 
+        Timers::CpuTimer cpuTimer;
+
+        cpuTimer.start();
+
         // Allocate needed data
         uint8_t *data = reinterpret_cast<uint8_t *>(malloc(sizeof(uint8_t) * outputSize));
         if (data == nullptr)
         {
             throw std::runtime_error("Cannot allocate memory\n");
         }
+
+        cpuTimer.end();
+        cpuTimer.printResult("Allocate an array on CPU");
+
+        cpuTimer.start();
 
         // Decompression
         size_t consumedBits = 0;
@@ -124,6 +151,9 @@ namespace FixedLength
                 consumedBits += usedBits;
             }
         }
+
+        cpuTimer.end();
+        cpuTimer.printResult("Decompression");
 
         return FLDecompressed{
             .data = data,
