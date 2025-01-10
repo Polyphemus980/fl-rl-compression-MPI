@@ -40,7 +40,7 @@ Zakładamy, że w tym przypadku frame ma wielkość 3 (w finalnym projekcie będ
    - obliczamy `outputOffset = bitsOffset % 8` (jest to offset wewnątrz bajta)
    - obliczamy `encodedValue = input[i] << outputOffset` (maska nie jest potrzebna, bo i tak najstarsze bity są wyzerowane)
    - zapisujemy wynik `atomicOr(output[outputId], encodedValue)`
-   - Dodatkowo musimy rozpatrzeć przypadek, gdy wartość będzie rozbita na dwa sąsiadujące inty (czyli kiedy `outputOffset + requiredBits > 8`) - wtedy obliczamy `overflowValue = encodedValue >> (8 - outputOffset)` (maska niepotrzebna z tego samego powodu co wyżej)
+   - Dodatkowo musimy rozpatrzeć przypadek, gdy wartość będzie rozbita na dwa sąsiadujące inty (czyli kiedy `outputOffset + requiredBits > 8`) - wtedy obliczamy `overflowValue = input[i] >> (8 - outputOffset)` (maska niepotrzebna z tego samego powodu co wyżej)
      i zapisujemy wynik w kolejnym elemencie poprzez `atomicOr(output[outputId + 1], overflowValue)`
 
    Oczywiście operacje atomiczne robimy najpierw na shared memory a dopiero później przepisujemy wyniki do pamięci globalnej, jednak dla czytelności opisu nie rozpisywałem tych szczegółów.

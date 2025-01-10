@@ -33,7 +33,7 @@ namespace FixedLength
         CHECK_CUDA(cudaMalloc(&d_frameStartIndiciesBits, sizeof(uint64_t) * bitsSize));
 
         // Calculate outputBits
-        constexpr size_t outputBitsThreadsPerBlock = 1024;
+        constexpr size_t outputBitsThreadsPerBlock = BLOCK_SIZE;
         const size_t outputBitsBlocksCount = ceil(size * 1.0 / outputBitsThreadsPerBlock);
         compressCalculateOutputBits<<<outputBitsBlocksCount, outputBitsThreadsPerBlock>>>(d_data, size, d_outputBits, bitsSize);
         CHECK_CUDA(cudaDeviceSynchronize());
@@ -52,7 +52,7 @@ namespace FixedLength
         }
 
         // Calculate frameStartIndiciesBits
-        constexpr size_t frameStartIndiciesThreadsPerBlock = 1024;
+        constexpr size_t frameStartIndiciesThreadsPerBlock = BLOCK_SIZE;
         const size_t frameStartIndiciesBlocksCount = ceil(bitsSize * 1.0 / frameStartIndiciesThreadsPerBlock);
         compressInitializeFrameStartIndiciesBits<<<frameStartIndiciesBlocksCount, frameStartIndiciesThreadsPerBlock>>>(d_frameStartIndiciesBits, d_outputBits, bitsSize);
         CHECK_CUDA(cudaDeviceSynchronize());
@@ -111,7 +111,6 @@ namespace FixedLength
             return;
         }
 
-        constexpr size_t BLOCK_SIZE = 1024;
         constexpr size_t FRAMES_PER_BLOCK = BLOCK_SIZE / FRAME_LENGTH;
 
         auto frameId = threadId / FRAME_LENGTH;
@@ -153,6 +152,48 @@ namespace FixedLength
         d_frameStartIndiciesBits[threadId] = d_outputBits[threadId] * FRAME_LENGTH;
     }
 
+    __global__ void compressCalculateOutput(uint8_t *d_data, size_t size, uint8_t *d_outputBits, size_t bitsSize, uint64_t *d_frameStartIndiciesBits, uint8_t *outputValues, size_t valuesSize)
+    {
+        auto threadId = blockDim.x * blockIdx.x + threadIdx.x;
+        auto localThreadId = threadIdx.x;
+
+        // Don't follow if threadId is outside of data scope
+        if (threadId >= size)
+        {
+            return;
+        }
+
+        // This should be the same size as `outputValues`
+        extern __shared__ uint8_t s_outputValues[];
+
+        // Initialize shared memory
+        size_t toInitPerThread = valuesSize / blockDim.x;
+        size_t forLastThreadAdditional = valuesSize % blockDim.x;
+        // TODO:
+        __syncthreads();
+
+        // Encode data
+        uint64_t frameId = threadId / FRAME_LENGTH;
+        uint64_t frameElementId = threadId % FRAME_LENGTH;
+        uint8_t requiredBits = d_outputBits[frameId];
+        uint64_t bitsOffset = frameId * FRAME_LENGTH * 8 + frameElementId * requiredBits;
+        size_t outputId = bitsOffset / 8;
+        uint8_t outputOffset = bitsOffset % 8;
+        uint8_t value = d_data[threadId];
+        uint8_t encodedValue = value << outputOffset;
+        // TODO: Save value to shared memory
+        // If it overflows encode the overflowed part on next byte
+        if (outputOffset + requiredBits > 8)
+        {
+            uint8_t overflowValue = value >> (8 - outputOffset);
+            // TODO: Save value to shared memory
+        }
+        __syncthreads();
+
+        // Save result to global memory
+        // TODO:
+    }
+
     // Helpers
     __device__ uint8_t atomicMaxUint8t(uint8_t *address, uint8_t val)
     {
@@ -175,6 +216,31 @@ namespace FixedLength
         } while (assumed != old);
 
         return old;
+    }
+
+    __device__ uint8_t atomicOrUint8t(uint8_t *address, uint8_t val)
+    {
+        unsigned int *base_address = (unsigned int *)((size_t)address & ~3);
+        unsigned int byte_position = (size_t)address & 3;
+        unsigned int selectors[] = {0x3210, 0x3204, 0x3404, 0x4204};
+        unsigned int sel = selectors[byte_position];
+        unsigned int old, assumed, new_;
+        old = *base_address;
+        do
+        {
+            assumed = old;
+            uint8_t current_val = (uint8_t)__byte_perm(old, 0, byte_position | 0x4440);
+            uint8_t updated_val = current_val | val;
+            new_ = __byte_perm(old, updated_val, sel);
+
+            if (new_ == old)
+                break;
+
+            old = atomicCAS(base_address, assumed, new_);
+
+        } while (assumed != old);
+
+        return (uint8_t)__byte_perm(old, 0, byte_position | 0x4440);
     }
 
     void compressCalculateFrameStartIndiciesBits(uint64_t *d_frameStartIndiciesBits, size_t bitsSize)
