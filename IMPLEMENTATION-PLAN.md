@@ -15,20 +15,9 @@ Posłużymy się prostym przykładem do wizualizacji sposobu:
 Zakładamy, że w tym przypadku frame ma wielkość 3 (w finalnym projekcie będzie to albo wartość możliwa do ustawienia podczas uruchomienia programu, albo inna większa wartość).
 `outputBits` oznacza liczbę bitów potrzebną do zakodowania danych w framie, `outputValues` zawiera dane już zakodowane, gdzie kodowanie w naszym przypadku to po prostu ucinanie nieznaczących zer. W przykładowym outpucie `---` oznacza przejście do nowego frame'a (jest ono wprowadzone tylko w celu łatwiejszego odczytania przykładu). Dodatkowo, zapis binarny wyniku nie jest w takiej postaci, w jakiej będzie to faktycznie zapisane w pamięci - jest to raczej przedstawienie, w jaki sposób chcemy daną liczbę zakodować. Nie przedstawiam faktycznego obrazu pamięci jako, że uważam, ze zaciemni to jedynie obraz i ogólny koncept algorytmu.
 
-// TODO: przepisac te czesc, uzywajac zamiast tego thrust::maxa shared memory i robic atomicMaxa
-// TODO: probably also need to use uint8_t instead of uint32_t
+1. Tworzymy tablicę `outputBits`, która będzie długości `ceil(input.length / framelength)`, czyli dokładnie tyle, ile będzie framów w finalnym wyniku. Tworzymy threada dla każdego elementu tablicy `input` i na każdym z nich wyliczamy minimalną liczbę potrzebnych bitów do reprezentacji danej wartości. Obliczony wynik przekazujemy do funkcji `atomicMax`, jako drugi argument podając `outputBits[j]`, gdzie `j = i / frameLength`.
 
-1. Tworzymy tablicę `requiredBits` o dlugości `n`, gdzie `n` to długość tablicy `input`, która będzie zawierała informację o tym, ile bitów jest potrzebnych do zapisania danej wartości. W naszym przypadku to będzie:
-
-   ```
-   [1, 2, 1, 3, 3, 3, 4, 1, 4]
-   ```
-
-   Możemy ją utworzyć poprzez utworzenie threada dla każdego elementu inputu i obliczenia dla niego `32 - __clz(input[i])`, przy czym musimy uważać na przypadek gdy `input[i] == 0`, wtedy po prostu zwracamy 1.
-
-2. Następnie chcemy obliczyć tablicę `outputBits`, która będzie długości `ceil(input.length / frame.length)`, czyli dokładnie tyle, ile będzie framów w finalnym wyniku. Wówczas `outputBits[i] = thrust::max_element(requiredBits[i * frame.Length], requiredBits[(i + 1) * frame.Length])`. Dodatkowo chcemy utworzyć zmienna globalną `outputValuesMinLength`, którą każdy thread (przy użyciu shared memory per block dla optymalizacji) będzie zwiększał o `outputBits[i] * frame.Length`.
-
-3. Potrzebujemy obliczyć jeszcze tablicę `frameStartIndices`, która w naszym przypadku będzie postaci:
+2. Potrzebujemy obliczyć jeszcze tablicę `frameStartIndices`, która w naszym przypadku będzie postaci:
 
    ```
    [0, 2 * 3, 2 * 3 + 3 * 3] = [0, 6, 15]
@@ -36,24 +25,22 @@ Zakładamy, że w tym przypadku frame ma wielkość 3 (w finalnym projekcie będ
 
    Aby ją utworzyć wystarczy:
 
-   - utworzyć tablice `frameBitsLength` stworzonej poprzez `frameBitsLength[i] = outputBits[i] * frame.Length`
+   - utworzyć tablice `frameBitsLength` stworzonej poprzez `frameBitsLength[i] = outputBits[i] * frameLength`
    - wywołać na tablicy `frameBitsLength` algorytm `Prescan`.
-     (algorytm `Prescan` zaimplementowany zgodnie ze wskazówkami z wykładu)
 
-4. Teraz chcemy utworzyć tablicę `outputValues`. Bedzię ona miała dlugość (w bajtach) `ceil(outputValuesMinlength / 8)`. Następnie tworzymy `n` threadów, gdzie `n` to liczba elementów tablicy `input`. Dla każdego threada wykonujemy następujące operacje:
+3. Teraz chcemy utworzyć tablicę `outputValues`. Bedzię ona miała dlugość (w bajtach) `ceil(outputValuesMinBitLength / 8)`, gdzie `outputValuesMinBitLength = frameStartIndicies.last + lastFrameElementsCount * outputBits.last`, natomiast `lastFrameElementsCount = frameLength` gdy `input.Length % frameLength = 0`, wpp `lastFrameElementsCount = input.Length - (input.Length / frameLength) * frameLength`.
+
+   Następnie tworzymy `n` threadów, gdzie `n` to liczba elementów tablicy `input`. Dla każdego threada wykonujemy następujące operacje:
 
    - obliczamy `frameId = i / frame.Length`
    - obliczamy `frameElementId = i % frame.Length`
    - obliczamy `requiredBits = outputBits[frameId]`
    - obliczamy `bitsOffset = frameStartIndices[frameId] + frameElementId * requiredBits`
-   - obliczamy `outputId = bitsOffset / 32` (dzielimy przez 32, bo obliczone wartości są w bitach, a my mamy tablicę intów).
-   - obliczamy `outputOffset = bitsOffset % 32` (jest to offset wewnątrz inta)
-   - obliczamy `mask = (1 << requiredBits) - 1`
-      // TODO: this mask here is probably not heeded
-   - obliczamy `encodedValue = (input[i] & mask) << outputOffset`
+   - obliczamy `outputId = bitsOffset / 8`
+   - obliczamy `outputOffset = bitsOffset % 8` (jest to offset wewnątrz bajta)
+   - obliczamy `encodedValue = input[i] << outputOffset` (maska nie jest potrzebna, bo i tak najstarsze bity są wyzerowane)
    - zapisujemy wynik `atomicOr(output[outputId], encodedValue)`
-      // TODO: is this mask here needed? isn't it actually a mistake?
-   - Dodatkowo musimy rozpatrzeć przypadek, gdy wartość będzie rozbita na dwa sąsiadujące inty (czyli kiedy `outputOffset + requiredBits > 32`) - wtedy obliczamy `overflowValue = (encodedValue & mask) >> (32 - outputOffset)`
+   - Dodatkowo musimy rozpatrzeć przypadek, gdy wartość będzie rozbita na dwa sąsiadujące inty (czyli kiedy `outputOffset + requiredBits > 8`) - wtedy obliczamy `overflowValue = encodedValue >> (8 - outputOffset)` (maska niepotrzebna z tego samego powodu co wyżej)
      i zapisujemy wynik w kolejnym elemencie poprzez `atomicOr(output[outputId + 1], overflowValue)`
 
    Oczywiście operacje atomiczne robimy najpierw na shared memory a dopiero później przepisujemy wyniki do pamięci globalnej, jednak dla czytelności opisu nie rozpisywałem tych szczegółów.
@@ -71,20 +58,19 @@ Posłużymy się prostym przykładem do wizualizacji sposobu:
 Kolejne kroki:
 
 1. Tworzymy tablicę `frameStartIndices` (tak samo jak w pkt.3 kompresji Fixed-length, z tą różnicą, że używamy `inputBits` zamiast `outputBits`).
-// TODO: dlugosc outputut trzeba dac jako parametr
-2. Tworzymy tablicę `output`, która będzie miała długość `frameLength * inputBits.Length` (bo każdy frame ma `frameLength` elementów, a framów jest tyle samo, co elementów w tablicy `inputBits`).
+2. Tworzymy tablicę `output`, która będzie miała długość `outputSize` zakodowaną w pliku podczas kompresji (więc mamy ją od razu za darmo).
 3. Uruchamiamy `n` threadów, gdzie `n` to długość tablicy `output`. Dla threada o indeksie `i` wykonujemy następujące operacje:
 
    - obliczamy `frameId = i / frame.Length`
    - obliczamy `frameElementId = i % frame.Length`
    - obliczamy `usedBits = inputBits[frameId]`
    - obliczamy `bitsOffset = frameStartIndices[frameId] + frameElementId * usedBits`
-   - obliczamy `inputId = bitsOffset / 32`
-   - obliczamy `inputOffset = bitsOffset % 32`
+   - obliczamy `inputId = bitsOffset / 8`
+   - obliczamy `inputOffset = bitsOffset % 8`
    - obliczamy `mask = (1 << usedBits) - 1`
    - obliczamy `decodedValue = (inputValues[inputId] >> inputOffset) & mask`
-   - dodatkowo rozpatrujemy przypadek, gdy wartość była zapisana na dwóch sąsiednich elementach w tablicy (czyli kiedy zachodzi `inputOffset + usedBits > 32`) - wtedy obliczamy:
-     - `overflowBits = inputOffset + usedBits - 32`
+   - dodatkowo rozpatrujemy przypadek, gdy wartość była zapisana na dwóch sąsiednich elementach w tablicy (czyli kiedy zachodzi `inputOffset + usedBits > 8`) - wtedy obliczamy:
+     - `overflowBits = inputOffset + usedBits - 8`
      - `overflowMask = (1 << overflowBits) - 1`
      - `overflowValue = inputValues[inputId + 1] & overflowMask << (usedBits - overflowBits)`
      - `decodedValue |= overflowValue`
