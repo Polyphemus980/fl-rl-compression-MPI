@@ -20,6 +20,7 @@ namespace FixedLength
 
     // Helpers
     __device__ uint8_t atomicMaxUint8t(uint8_t *address, uint8_t val);
+    __device__ uint8_t atomicOrUint8t(uint8_t *address, uint8_t val);
     void compressCalculateFrameStartIndiciesBits(uint64_t *d_frameStartIndiciesBits, size_t bitsSize);
 }
 

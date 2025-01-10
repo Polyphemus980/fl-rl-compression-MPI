@@ -91,39 +91,72 @@ int main(int argc, char **argv)
     //     printf("%hhu\n", result.data[i]);
     // }
 
-    constexpr size_t size0 = 1;
-    uint8_t data0[size0];
-    data0[0] = 0;
+    // constexpr size_t size0 = 1;
+    // uint8_t data0[size0];
+    // data0[0] = 0;
 
-    auto result0 = FixedLength::gpuCompress(data0, size0);
-    printf("\n\n");
+    // auto result0 = FixedLength::gpuCompress(data0, size0);
+    // printf("\n\n");
 
-    constexpr size_t size = 1025;
+    // constexpr size_t size = 1025;
+    // uint8_t data[size];
+    // for (size_t i = 0; i < 1024; i++)
+    // {
+    //     data[i] = 8;
+    // }
+    // data[1024] = 127;
+
+    // auto result = FixedLength::gpuCompress(data, size);
+    // printf("\n\n");
+
+    // constexpr size_t size2 = 1025;
+    // uint8_t data2[size];
+    // uint8_t value = 1;
+    // for (size_t i = 0; i < 1024; i++)
+    // {
+    //     data2[i] = value;
+    //     if (i % 128 == 0 && i > 0)
+    //     {
+    //         value *= 2;
+    //     }
+    // }
+    // data2[1024] = 0;
+
+    // auto result2 = FixedLength::gpuCompress(data2, size2);
+    // printf("\n\n");
+
+    constexpr size_t size = 128;
     uint8_t data[size];
-    for (size_t i = 0; i < 1024; i++)
+
+    for (size_t i = 0; i < size; i++)
     {
-        data[i] = 8;
+        data[i] = rand() % 256;
     }
-    data[1024] = 127;
 
     auto result = FixedLength::gpuCompress(data, size);
-    printf("\n\n");
+    printf("result size: %lu\n", result.valuesSize);
 
-    constexpr size_t size2 = 1025;
-    uint8_t data2[size];
-    uint8_t value = 1;
-    for (size_t i = 0; i < 1024; i++)
+    for (size_t i = 0; i < result.valuesSize; i++)
     {
-        data2[i] = value;
-        if (i % 128 == 0 && i > 0)
+        printf("%b\n", result.outputValues[i]);
+    }
+
+    auto decompressed = FixedLength::cpuDecompress(result.inputSize, result.outputBits, result.bitsSize, result.outputValues, result.valuesSize);
+
+    if (size != decompressed.size)
+    {
+        printf("XD\n");
+    }
+
+    for (size_t i = 0; i < size; i++)
+    {
+        if (data[i] != decompressed.data[i])
         {
-            value *= 2;
+            printf("wrong at %d\n", i);
         }
     }
-    data2[1024] = 0;
 
-    auto result2 = FixedLength::gpuCompress(data2, size2);
-    printf("\n\n");
+    printf("actually ok\n");
 
     return 0;
 }

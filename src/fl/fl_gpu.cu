@@ -83,18 +83,43 @@ namespace FixedLength
             printf("values size: %lu\n", valuesSize);
         }
 
-        // TODO: finish
+        // Allocate gpu array for `outputValues`
+        uint8_t *d_outputValues;
+        CHECK_CUDA(cudaMalloc(&d_outputValues, sizeof(uint8_t) * valuesSize));
+        CHECK_CUDA(cudaMemset(d_outputValues, 0, sizeof(uint8_t) * valuesSize));
+
+        constexpr size_t outputValuesThreadsPerBlock = BLOCK_SIZE;
+        const size_t outputValuesBlocksCount = ceil(size * 1.0 / outputValuesThreadsPerBlock);
+        compressCalculateOutput<<<outputValuesBlocksCount, outputValuesThreadsPerBlock>>>(d_data, size, d_outputBits, bitsSize, d_frameStartIndiciesBits, d_outputValues, valuesSize);
+        CHECK_CUDA(cudaDeviceSynchronize());
+        CHECK_CUDA(cudaGetLastError());
+
+        // Allocate arrays on CPU
+        uint8_t *outputBits = reinterpret_cast<uint8_t *>(malloc(sizeof(uint8_t) * bitsSize));
+        if (outputBits == nullptr)
+        {
+            throw std::runtime_error("Cannot allocate memory");
+        }
+        uint8_t *outputValues = reinterpret_cast<uint8_t *>(malloc(sizeof(uint8_t) * valuesSize));
+        if (outputValues == nullptr)
+        {
+            throw std::runtime_error("Cannot allocate memory");
+        }
+
+        // Copy results to CPU
+        CHECK_CUDA(cudaMemcpy(outputBits, d_outputBits, sizeof(uint8_t) * bitsSize, cudaMemcpyDeviceToHost));
+        CHECK_CUDA(cudaMemcpy(outputValues, d_outputValues, sizeof(uint8_t) * valuesSize, cudaMemcpyDeviceToHost));
 
         // Deallocate gpu arrays
         cudaFree(d_data);
         cudaFree(d_outputBits);
         cudaFree(d_frameStartIndiciesBits);
+        cudaFree(d_outputValues);
 
-        // TODO: fill it
         return FLCompressed{
-            .outputBits = nullptr,
+            .outputBits = outputBits,
             .bitsSize = bitsSize,
-            .outputValues = nullptr,
+            .outputValues = outputValues,
             .valuesSize = valuesSize,
             .inputSize = size};
     }
@@ -152,7 +177,7 @@ namespace FixedLength
         d_frameStartIndiciesBits[threadId] = d_outputBits[threadId] * FRAME_LENGTH;
     }
 
-    __global__ void compressCalculateOutput(uint8_t *d_data, size_t size, uint8_t *d_outputBits, size_t bitsSize, uint64_t *d_frameStartIndiciesBits, uint8_t *outputValues, size_t valuesSize)
+    __global__ void compressCalculateOutput(uint8_t *d_data, size_t size, uint8_t *d_outputBits, size_t bitsSize, uint64_t *d_frameStartIndiciesBits, uint8_t *d_outputValues, size_t valuesSize)
     {
         auto threadId = blockDim.x * blockIdx.x + threadIdx.x;
         auto localThreadId = threadIdx.x;
@@ -163,12 +188,7 @@ namespace FixedLength
             return;
         }
 
-        // This should be the same size as `outputValues`
-        extern __shared__ uint8_t s_outputValues[];
-
         // Initialize shared memory
-        size_t toInitPerThread = valuesSize / blockDim.x;
-        size_t forLastThreadAdditional = valuesSize % blockDim.x;
         // TODO:
         __syncthreads();
 
@@ -176,17 +196,17 @@ namespace FixedLength
         uint64_t frameId = threadId / FRAME_LENGTH;
         uint64_t frameElementId = threadId % FRAME_LENGTH;
         uint8_t requiredBits = d_outputBits[frameId];
-        uint64_t bitsOffset = frameId * FRAME_LENGTH * 8 + frameElementId * requiredBits;
+        uint64_t bitsOffset = d_frameStartIndiciesBits[frameId] + frameElementId * (uint64_t)requiredBits;
         size_t outputId = bitsOffset / 8;
         uint8_t outputOffset = bitsOffset % 8;
         uint8_t value = d_data[threadId];
-        uint8_t encodedValue = value << outputOffset;
-        // TODO: Save value to shared memory
+        uint8_t encodedValue = (value << outputOffset);
+        atomicOrUint8t(&d_outputValues[outputId], encodedValue);
         // If it overflows encode the overflowed part on next byte
         if (outputOffset + requiredBits > 8)
         {
-            uint8_t overflowValue = value >> (8 - outputOffset);
-            // TODO: Save value to shared memory
+            uint8_t overflowValue = (value >> (8 - outputOffset));
+            atomicOrUint8t(&d_outputValues[outputId + 1], overflowValue);
         }
         __syncthreads();
 
@@ -221,16 +241,15 @@ namespace FixedLength
     __device__ uint8_t atomicOrUint8t(uint8_t *address, uint8_t val)
     {
         unsigned int *base_address = (unsigned int *)((size_t)address & ~3);
-        unsigned int byte_position = (size_t)address & 3;
-        unsigned int selectors[] = {0x3210, 0x3204, 0x3404, 0x4204};
-        unsigned int sel = selectors[byte_position];
-        unsigned int old, assumed, new_;
+        unsigned int selectors[] = {0x3214, 0x3240, 0x3410, 0x4210};
+        unsigned int sel = selectors[(size_t)address & 3];
+        unsigned int old, assumed, new_, current_val, updated_val;
         old = *base_address;
         do
         {
             assumed = old;
-            uint8_t current_val = (uint8_t)__byte_perm(old, 0, byte_position | 0x4440);
-            uint8_t updated_val = current_val | val;
+            current_val = (uint8_t)__byte_perm(old, 0, ((size_t)address & 3) | 0x4440);
+            updated_val = current_val | val;
             new_ = __byte_perm(old, updated_val, sel);
 
             if (new_ == old)
@@ -240,7 +259,7 @@ namespace FixedLength
 
         } while (assumed != old);
 
-        return (uint8_t)__byte_perm(old, 0, byte_position | 0x4440);
+        return old;
     }
 
     void compressCalculateFrameStartIndiciesBits(uint64_t *d_frameStartIndiciesBits, size_t bitsSize)
