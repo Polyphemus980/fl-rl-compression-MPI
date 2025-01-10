@@ -70,6 +70,19 @@ namespace FixedLength
             }
         }
 
+        // Calculate length of outputValues array
+        uint8_t outputBitsLast = 0;
+        CHECK_CUDA(cudaMemcpy(&outputBitsLast, &d_outputBits[bitsSize - 1], sizeof(uint8_t), cudaMemcpyDeviceToHost));
+        uint64_t frameStartIndiciesBitsLast = 0;
+        CHECK_CUDA(cudaMemcpy(&frameStartIndiciesBitsLast, &d_frameStartIndiciesBits[bitsSize - 1], sizeof(uint64_t), cudaMemcpyDeviceToHost));
+        uint64_t lastFrameElementCount = size % FRAME_LENGTH == 0 ? FRAME_LENGTH : (size - (size / FRAME_LENGTH) * FRAME_LENGTH);
+        size_t valuesSize = ceil((frameStartIndiciesBitsLast + lastFrameElementCount * outputBitsLast) * 1.0 / 8);
+
+        // FIXME: remove me, only for testing
+        {
+            printf("values size: %lu\n", valuesSize);
+        }
+
         // TODO: finish
 
         // Deallocate gpu arrays
@@ -80,10 +93,10 @@ namespace FixedLength
         // TODO: fill it
         return FLCompressed{
             .outputBits = nullptr,
-            .bitsSize = 0,
+            .bitsSize = bitsSize,
             .outputValues = nullptr,
-            .valuesSize = 0,
-            .inputSize = 0};
+            .valuesSize = valuesSize,
+            .inputSize = size};
     }
 
     // Kernels

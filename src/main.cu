@@ -91,6 +91,13 @@ int main(int argc, char **argv)
     //     printf("%hhu\n", result.data[i]);
     // }
 
+    constexpr size_t size0 = 1;
+    uint8_t data0[size0];
+    data0[0] = 0;
+
+    auto result0 = FixedLength::gpuCompress(data0, size0);
+    printf("\n\n");
+
     constexpr size_t size = 1025;
     uint8_t data[size];
     for (size_t i = 0; i < 1024; i++)
@@ -100,6 +107,7 @@ int main(int argc, char **argv)
     data[1024] = 127;
 
     auto result = FixedLength::gpuCompress(data, size);
+    printf("\n\n");
 
     constexpr size_t size2 = 1025;
     uint8_t data2[size];
@@ -107,7 +115,6 @@ int main(int argc, char **argv)
     for (size_t i = 0; i < 1024; i++)
     {
         data2[i] = value;
-        printf("%hhu\n", value);
         if (i % 128 == 0 && i > 0)
         {
             value *= 2;
@@ -116,6 +123,7 @@ int main(int argc, char **argv)
     data2[1024] = 0;
 
     auto result2 = FixedLength::gpuCompress(data2, size2);
+    printf("\n\n");
 
     return 0;
 }
