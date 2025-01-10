@@ -22,6 +22,22 @@ namespace FixedLength
         uint8_t *data;
         size_t size;
     };
+
+    inline __device__ __host__ uint8_t countLeadingZeroes(uint8_t value)
+    {
+        if (value == 0)
+        {
+            return 8;
+        }
+        uint8_t count = 0;
+        uint8_t mask = 1 << 7;
+        while (!(value & mask))
+        {
+            count++;
+            value <<= 1;
+        }
+        return count;
+    }
 } //  FixedLength
 
 #endif // FL_COMMON_H
