@@ -181,6 +181,8 @@ void test_rl_cpu_decompression_zero_count(void)
     TEST_ARRAYS_EQUAL(expectedData, decompressedData.data, expectedSize, "%hhu");
 }
 
+// Compression + Decompression
+
 void test_rl_cpu_compression_decompression_implementation_plan_example(void)
 {
     uint8_t data[] = {5, 5, 8, 8, 8, 7, 7, 7, 7, 3, 4, 4, 4};
