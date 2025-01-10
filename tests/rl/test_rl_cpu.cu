@@ -181,7 +181,76 @@ void test_rl_cpu_decompression_zero_count(void)
     TEST_ARRAYS_EQUAL(expectedData, decompressedData.data, expectedSize, "%hhu");
 }
 
-// TODO: add tests that do both compression and then decompression
+void test_rl_cpu_compression_decompression_implementation_plan_example(void)
+{
+    uint8_t data[] = {5, 5, 8, 8, 8, 7, 7, 7, 7, 3, 4, 4, 4};
+    size_t dataSize = 13;
+
+    auto compressed = RunLength::cpuCompress(data, dataSize);
+    auto decompressed = RunLength::cpuDecompress(compressed.outputValues, compressed.outputCounts, compressed.count);
+    TEST_CHECK_(decompressed.size == dataSize, "%zu is equal to %zu", decompressed.size, dataSize);
+    TEST_ARRAYS_EQUAL(data, decompressed.data, dataSize, "%hhu");
+}
+
+void test_rl_cpu_compression_decompresion_empty(void)
+{
+    uint8_t data[] = {};
+    size_t dataSize = 0;
+
+    auto compressed = RunLength::cpuCompress(data, dataSize);
+    auto decompressed = RunLength::cpuDecompress(compressed.outputValues, compressed.outputCounts, compressed.count);
+    TEST_CHECK_(decompressed.size == dataSize, "%zu is equal to %zu", decompressed.size, dataSize);
+    TEST_ARRAYS_EQUAL(data, decompressed.data, dataSize, "%hhu");
+}
+
+void test_rl_cpu_compression_decompression_single_value(void)
+{
+    uint8_t data[] = {9};
+    size_t dataSize = 1;
+
+    auto compressed = RunLength::cpuCompress(data, dataSize);
+    auto decompressed = RunLength::cpuDecompress(compressed.outputValues, compressed.outputCounts, compressed.count);
+    TEST_CHECK_(decompressed.size == dataSize, "%zu is equal to %zu", decompressed.size, dataSize);
+    TEST_ARRAYS_EQUAL(data, decompressed.data, dataSize, "%hhu");
+}
+
+void test_rl_cpu_compression_decompression_unique_elements(void)
+{
+    uint8_t data[] = {1, 2, 3, 4, 5};
+    size_t dataSize = 5;
+
+    auto compressed = RunLength::cpuCompress(data, dataSize);
+    auto decompressed = RunLength::cpuDecompress(compressed.outputValues, compressed.outputCounts, compressed.count);
+    TEST_CHECK_(decompressed.size == dataSize, "%zu is equal to %zu", decompressed.size, dataSize);
+    TEST_ARRAYS_EQUAL(data, decompressed.data, dataSize, "%hhu");
+}
+
+void test_rl_cpu_compression_decompression_large_sequence(void)
+{
+    uint8_t data[256];
+    size_t dataSize = 256;
+
+    for (size_t i = 0; i < dataSize; ++i)
+    {
+        data[i] = 100;
+    }
+
+    auto compressed = RunLength::cpuCompress(data, dataSize);
+    auto decompressed = RunLength::cpuDecompress(compressed.outputValues, compressed.outputCounts, compressed.count);
+    TEST_CHECK_(decompressed.size == dataSize, "%zu is equal to %zu", decompressed.size, dataSize);
+    TEST_ARRAYS_EQUAL(data, decompressed.data, dataSize, "%hhu");
+}
+
+void test_rl_cpu_compression_decompression_alternating(void)
+{
+    uint8_t data[] = {1, 2, 1, 2, 1, 2, 1, 2};
+    size_t dataSize = 8;
+
+    auto compressed = RunLength::cpuCompress(data, dataSize);
+    auto decompressed = RunLength::cpuDecompress(compressed.outputValues, compressed.outputCounts, compressed.count);
+    TEST_CHECK_(decompressed.size == dataSize, "%zu is equal to %zu", decompressed.size, dataSize);
+    TEST_ARRAYS_EQUAL(data, decompressed.data, dataSize, "%hhu");
+}
 
 TEST_LIST = {
     // Compression
@@ -198,4 +267,11 @@ TEST_LIST = {
     {"test_rl_cpu_decompression_alternating_values", test_rl_cpu_decompression_alternating_values},
     {"test_rl_cpu_decompression_large_sequence", test_rl_cpu_decompression_large_sequence},
     {"test_rl_cpu_decompression_zero_count", test_rl_cpu_decompression_zero_count},
+    // Compression + Decompression
+    {"test_rl_cpu_compression_decompression_implementation_plan_example", test_rl_cpu_compression_decompression_implementation_plan_example},
+    {"test_rl_cpu_compression_decompresion_empty", test_rl_cpu_compression_decompresion_empty},
+    {"test_rl_cpu_compression_decompression_single_value", test_rl_cpu_compression_decompression_single_value},
+    {"test_rl_cpu_compression_decompression_unique_elements", test_rl_cpu_compression_decompression_unique_elements},
+    {"test_rl_cpu_compression_decompression_large_sequence", test_rl_cpu_compression_decompression_large_sequence},
+    {"test_rl_cpu_compression_decompression_alternating", test_rl_cpu_compression_decompression_alternating},
     {nullptr, nullptr}};
