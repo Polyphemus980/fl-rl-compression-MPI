@@ -303,6 +303,8 @@ void test_rl_gpu_decompression_zero_count(void)
     TEST_ARRAYS_EQUAL(expectedData, decompressedData.data, expectedSize, "%hhu");
 }
 
+// TODO: add tests that do both compression and then decompression
+
 TEST_LIST = {
     // Compression
     {"test_rl_gpu_compression_implementation_plan_example", test_rl_gpu_compression_implementation_plan_example},

@@ -1,13 +1,13 @@
 #include "../common.cuh"
-#include "../../src/fl/fl_cpu.cuh"
+#include "../../src/fl/fl_gpu.cuh"
 
 // Compressions
-void test_fl_cpu_compression_simple_example(void)
+void test_fl_gpu_compression_simple_example(void)
 {
     uint8_t data[] = {1, 2, 3, 4, 5, 6, 7};
     size_t size = 7;
 
-    auto result = FixedLength::cpuCompress(data, size);
+    auto result = FixedLength::gpuCompress(data, size);
 
     size_t expectedBitsCount = 1;
     size_t expectedValuesCount = 3;
@@ -21,12 +21,12 @@ void test_fl_cpu_compression_simple_example(void)
     TEST_ARRAYS_EQUAL(expectedValues, result.outputValues, expectedValuesCount, "%hhu");
 }
 
-void test_fl_cpu_compression_all_zeroes(void)
+void test_fl_gpu_compression_all_zeroes(void)
 {
     uint8_t data[] = {0, 0, 0, 0, 0, 0, 0, 0};
     size_t size = 8;
 
-    auto result = FixedLength::cpuCompress(data, size);
+    auto result = FixedLength::gpuCompress(data, size);
 
     size_t expectedBitsCount = 1;
     size_t expectedValuesCount = 1;
@@ -40,12 +40,12 @@ void test_fl_cpu_compression_all_zeroes(void)
     TEST_ARRAYS_EQUAL(expectedValues, result.outputValues, expectedValuesCount, "%hhu");
 }
 
-void test_fl_cpu_compression_all_ones(void)
+void test_fl_gpu_compression_all_ones(void)
 {
     uint8_t data[] = {255, 255, 255, 255};
     size_t size = 4;
 
-    auto result = FixedLength::cpuCompress(data, size);
+    auto result = FixedLength::gpuCompress(data, size);
 
     size_t expectedBitsCount = 1;
     size_t expectedValuesCount = 4;
@@ -59,12 +59,12 @@ void test_fl_cpu_compression_all_ones(void)
     TEST_ARRAYS_EQUAL(expectedValues, result.outputValues, expectedValuesCount, "%hhu");
 }
 
-void test_fl_cpu_compression_mixed_values(void)
+void test_fl_gpu_compression_mixed_values(void)
 {
     uint8_t data[] = {128, 64, 32, 16, 8, 4, 2, 1};
     size_t size = 8;
 
-    auto result = FixedLength::cpuCompress(data, size);
+    auto result = FixedLength::gpuCompress(data, size);
 
     size_t expectedBitsCount = 1;
     size_t expectedValuesCount = 8;
@@ -78,12 +78,12 @@ void test_fl_cpu_compression_mixed_values(void)
     TEST_ARRAYS_EQUAL(expectedValues, result.outputValues, expectedValuesCount, "%hhu");
 }
 
-void test_fl_cpu_compression_single_value(void)
+void test_fl_gpu_compression_single_value(void)
 {
     uint8_t data[] = {42};
     size_t size = 1;
 
-    auto result = FixedLength::cpuCompress(data, size);
+    auto result = FixedLength::gpuCompress(data, size);
 
     size_t expectedBitsCount = 1;
     size_t expectedValuesCount = 1;
@@ -97,7 +97,7 @@ void test_fl_cpu_compression_single_value(void)
     TEST_ARRAYS_EQUAL(expectedValues, result.outputValues, expectedValuesCount, "%hhu");
 }
 
-void test_fl_cpu_compression_two_frames(void)
+void test_fl_gpu_compression_two_frames(void)
 {
     uint8_t data[130];
     for (size_t i = 0; i < 130; i++)
@@ -106,7 +106,7 @@ void test_fl_cpu_compression_two_frames(void)
     }
     size_t size = 130;
 
-    auto result = FixedLength::cpuCompress(data, size);
+    auto result = FixedLength::gpuCompress(data, size);
 
     size_t expectedBitsCount = 2;
     size_t expectedValuesCount = 33;
@@ -127,7 +127,7 @@ void test_fl_cpu_compression_two_frames(void)
     TEST_ARRAYS_EQUAL(expectedValues, result.outputValues, expectedValuesCount, "%hhu");
 }
 
-void test_fl_cpu_compression_three_frames(void)
+void test_fl_gpu_compression_three_frames(void)
 {
     uint8_t data[384]; // 3 * 128
     for (size_t i = 0; i < 384; i++)
@@ -136,7 +136,7 @@ void test_fl_cpu_compression_three_frames(void)
     }
     size_t size = 384;
 
-    auto result = FixedLength::cpuCompress(data, size);
+    auto result = FixedLength::gpuCompress(data, size);
 
     size_t expectedBitsCount = 3;
     size_t expectedValuesCount = 192; // 384 * 4 / 8
@@ -181,7 +181,7 @@ void test_fl_cpu_compression_three_frames(void)
     TEST_ARRAYS_EQUAL(expectedValues, result.outputValues, expectedValuesCount, "%hhu");
 }
 
-void test_fl_cpu_compression_partial_last_frame(void)
+void test_fl_gpu_compression_partial_last_frame(void)
 {
     uint8_t data[250];
     for (size_t i = 0; i < 250; i++)
@@ -190,7 +190,7 @@ void test_fl_cpu_compression_partial_last_frame(void)
     }
     size_t size = 250;
 
-    auto result = FixedLength::cpuCompress(data, size);
+    auto result = FixedLength::gpuCompress(data, size);
 
     size_t expectedBitsCount = 2;
     size_t expectedValuesCount = 32;
@@ -210,7 +210,7 @@ void test_fl_cpu_compression_partial_last_frame(void)
     TEST_ARRAYS_EQUAL(expectedValues, result.outputValues, expectedValuesCount, "%hhu");
 }
 
-void test_fl_cpu_compression_different_bits_per_frame(void)
+void test_fl_gpu_compression_different_bits_per_frame(void)
 {
     uint8_t data[256]; // 2 full frames
     for (size_t i = 0; i < 128; i++)
@@ -223,7 +223,7 @@ void test_fl_cpu_compression_different_bits_per_frame(void)
     }
     size_t size = 256;
 
-    auto result = FixedLength::cpuCompress(data, size);
+    auto result = FixedLength::gpuCompress(data, size);
 
     size_t expectedBitsCount = 2;
     size_t expectedValuesCount = 112;
@@ -255,159 +255,15 @@ void test_fl_cpu_compression_different_bits_per_frame(void)
     TEST_ARRAYS_EQUAL(expectedValues, result.outputValues, expectedValuesCount, "%hhu");
 }
 
-// Decompressions
-void test_fl_cpu_decompression_simple_example(void)
-{
-    size_t bitsCount = 1;
-    size_t valuesCount = 3;
-    uint8_t bits[] = {3};
-    uint8_t values[] = {0b11010001, 0b01011000, 0b00011111};
-    size_t outputSize = 7;
-
-    auto result = FixedLength::cpuDecompress(outputSize, bits, bitsCount, values, valuesCount);
-
-    uint8_t expectedData[] = {1, 2, 3, 4, 5, 6, 7};
-    size_t expectedSize = 7;
-
-    TEST_CHECK_(result.size == expectedSize, "%zu is equal to %zu", result.size, expectedSize);
-    TEST_ARRAYS_EQUAL(expectedData, result.data, expectedSize, "%hhu");
-}
-
-void test_fl_cpu_decompression_single_element(void)
-{
-    size_t bitsCount = 1;
-    size_t valuesCount = 1;
-    uint8_t bits[] = {8};
-    uint8_t values[] = {0b11111111};
-    size_t outputSize = 1;
-
-    auto result = FixedLength::cpuDecompress(outputSize, bits, bitsCount, values, valuesCount);
-
-    uint8_t expectedData[] = {255};
-    size_t expectedSize = 1;
-
-    TEST_CHECK_(result.size == expectedSize, "%zu is equal to %zu", result.size, expectedSize);
-    TEST_ARRAYS_EQUAL(expectedData, result.data, expectedSize, "%hhu");
-}
-
-void test_fl_cpu_decompression_single_frame_partial(void)
-{
-    size_t bitsCount = 1;
-    size_t valuesCount = 3;
-    uint8_t bits[] = {4};
-    uint8_t values[] = {0b00111010, 0b11001111, 0b00001000};
-    size_t outputSize = 5;
-
-    auto result = FixedLength::cpuDecompress(outputSize, bits, bitsCount, values, valuesCount);
-
-    uint8_t expectedData[] = {10, 3, 15, 12, 8};
-    size_t expectedSize = 5;
-
-    TEST_CHECK_(result.size == expectedSize, "%zu is equal to %zu", result.size, expectedSize);
-    TEST_ARRAYS_EQUAL(expectedData, result.data, expectedSize, "%hhu");
-}
-
-void test_fl_cpu_decompression_two_frames(void)
-{
-    size_t bitsCount = 2;
-    size_t valuesCount = 112; // (128 * 3 + 128 * 4) / 8
-    uint8_t bits[] = {3, 4};
-
-    uint8_t values[112] = {0};
-
-    // Only 6s
-    for (size_t i = 0; i < 48; i += 3)
-    {
-        values[i] = 0b10110110;
-        if (i + 1 < 48)
-        {
-            values[i + 1] = 0b01101101;
-        }
-        if (i + 2 < 48)
-        {
-            values[i + 2] = 0b11011011;
-        }
-    }
-
-    // Only 11s
-    for (size_t i = 48; i < 112; i++)
-    {
-        values[i] = 0b10111011;
-    }
-
-    size_t outputSize = 256;
-
-    auto result = FixedLength::cpuDecompress(outputSize, bits, bitsCount, values, valuesCount);
-
-    uint8_t expectedData[256];
-    for (size_t i = 0; i < 128; i++)
-    {
-        expectedData[i] = 6;
-    }
-    for (size_t i = 128; i < 256; i++)
-    {
-        expectedData[i] = 11;
-    }
-
-    TEST_CHECK_(result.size == outputSize, "%zu is equal to %zu", result.size, outputSize);
-    TEST_ARRAYS_EQUAL(expectedData, result.data, outputSize, "%hhu");
-}
-
-void test_fl_cpu_decompression_last_frame_not_full(void)
-{
-    size_t bitsCount = 2;
-    size_t valuesCount = 49; // (128 * 3 + 5) / 8
-    uint8_t bits[] = {3, 5};
-    uint8_t values[49];
-
-    // Only 6s
-    for (size_t i = 0; i < 48; i += 3)
-    {
-        values[i] = 0b10110110;
-        if (i + 1 < 48)
-        {
-            values[i + 1] = 0b01101101;
-        }
-        if (i + 2 < 48)
-        {
-            values[i + 2] = 0b11011011;
-        }
-    }
-    // 16 at the end
-    values[48] = 0b00010000;
-
-    size_t outputSize = 129;
-
-    auto result = FixedLength::cpuDecompress(outputSize, bits, bitsCount, values, valuesCount);
-
-    uint8_t expectedData[129];
-    for (size_t i = 0; i < 128; i++)
-    {
-        expectedData[i] = 6;
-    }
-    expectedData[128] = 16;
-
-    TEST_CHECK_(result.size == outputSize, "%zu is equal to %zu", result.size, outputSize);
-    TEST_ARRAYS_EQUAL(expectedData, result.data, outputSize, "%hhu");
-}
-
-// TODO: add tests that do both compression and then decompression
-
 TEST_LIST = {
     // Compressions
-    {"test_fl_cpu_compression_simple_example", test_fl_cpu_compression_simple_example},
-    {"test_fl_cpu_compression_all_zeroes", test_fl_cpu_compression_all_zeroes},
-    {"test_fl_cpu_compression_all_ones", test_fl_cpu_compression_all_ones},
-    {"test_fl_cpu_compression_mixed_values", test_fl_cpu_compression_mixed_values},
-    {"test_fl_cpu_compression_single_value", test_fl_cpu_compression_single_value},
-    {"test_fl_cpu_compression_two_frames", test_fl_cpu_compression_two_frames},
-    {"test_fl_cpu_compression_three_frames", test_fl_cpu_compression_three_frames},
-    {"test_fl_cpu_compression_partial_last_frame", test_fl_cpu_compression_partial_last_frame},
-    {"test_fl_cpu_compression_different_bits_per_frame", test_fl_cpu_compression_different_bits_per_frame},
-    // Decompressions
-    {"test_fl_cpu_decompression_simple_example", test_fl_cpu_decompression_simple_example},
-    {"test_fl_cpu_decompression_single_element", test_fl_cpu_decompression_single_element},
-    {"test_fl_cpu_decompression_single_frame_partial", test_fl_cpu_decompression_single_frame_partial},
-    {"test_fl_cpu_decompression_two_frames", test_fl_cpu_decompression_two_frames},
-    {"test_fl_cpu_decompression_last_frame_not_full", test_fl_cpu_decompression_last_frame_not_full},
+    {"test_fl_gpu_compression_simple_example", test_fl_gpu_compression_simple_example},
+    {"test_fl_gpu_compression_all_zeroes", test_fl_gpu_compression_all_zeroes},
+    {"test_fl_gpu_compression_all_ones", test_fl_gpu_compression_all_ones},
+    {"test_fl_gpu_compression_mixed_values", test_fl_gpu_compression_mixed_values},
+    {"test_fl_gpu_compression_single_value", test_fl_gpu_compression_single_value},
+    {"test_fl_gpu_compression_two_frames", test_fl_gpu_compression_two_frames},
+    {"test_fl_gpu_compression_three_frames", test_fl_gpu_compression_three_frames},
+    {"test_fl_gpu_compression_partial_last_frame", test_fl_gpu_compression_partial_last_frame},
+    {"test_fl_gpu_compression_different_bits_per_frame", test_fl_gpu_compression_different_bits_per_frame},
     {nullptr, nullptr}};
