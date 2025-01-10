@@ -101,5 +101,21 @@ int main(int argc, char **argv)
 
     auto result = FixedLength::gpuCompress(data, size);
 
+    constexpr size_t size2 = 1025;
+    uint8_t data2[size];
+    uint8_t value = 1;
+    for (size_t i = 0; i < 1024; i++)
+    {
+        data2[i] = value;
+        printf("%hhu\n", value);
+        if (i % 128 == 0 && i > 0)
+        {
+            value *= 2;
+        }
+    }
+    data2[1024] = 0;
+
+    auto result2 = FixedLength::gpuCompress(data2, size2);
+
     return 0;
 }

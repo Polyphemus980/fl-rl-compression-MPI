@@ -1,3 +1,7 @@
+#include <thrust/execution_policy.h>
+#include <thrust/functional.h>
+#include <thrust/scan.h>
+
 #include "fl_gpu.cuh"
 #include "../utils.cuh"
 
@@ -21,10 +25,12 @@ namespace FixedLength
         CHECK_CUDA(cudaMalloc(&d_data, sizeof(uint8_t) * size));
         CHECK_CUDA(cudaMemcpy(d_data, data, sizeof(uint8_t) * size, cudaMemcpyHostToDevice));
 
-        // Allocate outputBits on GPU
+        // Allocate arrays on GPU
         size_t bitsSize = ceil(size * 1.0 / FRAME_LENGTH);
         uint8_t *d_outputBits;
         CHECK_CUDA(cudaMalloc(&d_outputBits, sizeof(uint8_t) * bitsSize));
+        uint64_t *d_frameStartIndiciesBits;
+        CHECK_CUDA(cudaMalloc(&d_frameStartIndiciesBits, sizeof(uint64_t) * bitsSize));
 
         // Calculate outputBits
         constexpr size_t outputBitsThreadsPerBlock = 1024;
@@ -45,11 +51,31 @@ namespace FixedLength
             }
         }
 
+        // Calculate frameStartIndiciesBits
+        constexpr size_t frameStartIndiciesThreadsPerBlock = 1024;
+        const size_t frameStartIndiciesBlocksCount = ceil(bitsSize * 1.0 / frameStartIndiciesThreadsPerBlock);
+        compressInitializeFrameStartIndiciesBits<<<frameStartIndiciesBlocksCount, frameStartIndiciesThreadsPerBlock>>>(d_frameStartIndiciesBits, d_outputBits, bitsSize);
+        CHECK_CUDA(cudaDeviceSynchronize());
+        CHECK_CUDA(cudaGetLastError());
+        compressCalculateFrameStartIndiciesBits(d_frameStartIndiciesBits, bitsSize);
+
+        // FIXME: remove me, only for testing
+        {
+            uint64_t *frameStartIndiciesBitsCPU = reinterpret_cast<uint64_t *>(malloc(sizeof(uint64_t) * bitsSize));
+            CHECK_CUDA(cudaMemcpy(frameStartIndiciesBitsCPU, d_frameStartIndiciesBits, sizeof(uint64_t) * bitsSize, cudaMemcpyDeviceToHost));
+            printf("frameStartIndiciesBits: \n");
+            for (size_t i = 0; i < bitsSize; i++)
+            {
+                printf("%lu\n", frameStartIndiciesBitsCPU[i]);
+            }
+        }
+
         // TODO: finish
 
         // Deallocate gpu arrays
         cudaFree(d_data);
         cudaFree(d_outputBits);
+        cudaFree(d_frameStartIndiciesBits);
 
         // TODO: fill it
         return FLCompressed{
@@ -101,6 +127,19 @@ namespace FixedLength
         }
     }
 
+    __global__ void compressInitializeFrameStartIndiciesBits(uint64_t *d_frameStartIndiciesBits, uint8_t *d_outputBits, size_t bitsSize)
+    {
+        auto threadId = blockDim.x * blockIdx.x + threadIdx.x;
+
+        // Don't follow if threadId is outside of data scope
+        if (threadId >= bitsSize)
+        {
+            return;
+        }
+
+        d_frameStartIndiciesBits[threadId] = d_outputBits[threadId] * FRAME_LENGTH;
+    }
+
     // Helpers
     __device__ uint8_t atomicMaxUint8t(uint8_t *address, uint8_t val)
     {
@@ -123,6 +162,11 @@ namespace FixedLength
         } while (assumed != old);
 
         return old;
+    }
+
+    void compressCalculateFrameStartIndiciesBits(uint64_t *d_frameStartIndiciesBits, size_t bitsSize)
+    {
+        thrust::exclusive_scan(thrust::device, d_frameStartIndiciesBits, d_frameStartIndiciesBits + bitsSize, d_frameStartIndiciesBits);
     }
 
 }
