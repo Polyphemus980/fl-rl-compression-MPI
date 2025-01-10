@@ -6,6 +6,7 @@
 #include "./rl/rl_cpu.cuh"
 #include "./rl/rl_gpu.cuh"
 #include "./fl/fl_cpu.cuh"
+#include "./fl/fl_gpu.cuh"
 
 int main(int argc, char **argv)
 {
@@ -61,34 +62,44 @@ int main(int argc, char **argv)
 
     // printf("bits size: %llu, values size: %llu\n", result.bitsSize, result.valuesSize);
 
-    size_t bitsCount = 2;
-    size_t valuesCount = 112; // (128 * 3 + 128 * 4) / 8
-    uint8_t bits[] = {3, 4};
+    // size_t bitsCount = 2;
+    // size_t valuesCount = 112; // (128 * 3 + 128 * 4) / 8
+    // uint8_t bits[] = {3, 4};
 
-    uint8_t values[112] = {0};
+    // uint8_t values[112] = {0};
 
-    // Only 6s
-    for (size_t i = 0; i < 48; i += 3)
+    // // Only 6s
+    // for (size_t i = 0; i < 48; i += 3)
+    // {
+    //     values[i] = 0b10110110;
+    //     values[i + 1] = 0b11011001;
+    //     values[i + 2] = 0b01101101;
+    // }
+
+    // // Only 11s
+    // for (size_t i = 48; i < 112; i++)
+    // {
+    //     values[i] = 0b10111011;
+    // }
+
+    // size_t outputSize = 256;
+
+    // auto result2 = FixedLength::cpuDecompress(outputSize, bits, bitsCount, values, valuesCount);
+
+    // for (size_t i = 0; i < result.size; i++)
+    // {
+    //     printf("%hhu\n", result.data[i]);
+    // }
+
+    constexpr size_t size = 1025;
+    uint8_t data[size];
+    for (size_t i = 0; i < 1024; i++)
     {
-        values[i] = 0b10110110;
-        values[i + 1] = 0b11011001;
-        values[i + 2] = 0b01101101;
+        data[i] = 8;
     }
+    data[1024] = 127;
 
-    // Only 11s
-    for (size_t i = 48; i < 112; i++)
-    {
-        values[i] = 0b10111011;
-    }
-
-    size_t outputSize = 256;
-
-    auto result = FixedLength::cpuDecompress(outputSize, bits, bitsCount, values, valuesCount);
-
-    for (size_t i = 0; i < result.size; i++)
-    {
-        printf("%hhu\n", result.data[i]);
-    }
+    auto result = FixedLength::gpuCompress(data, size);
 
     return 0;
 }
