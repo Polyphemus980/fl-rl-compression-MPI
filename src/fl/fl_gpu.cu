@@ -20,17 +20,17 @@ namespace FixedLength
                 .inputSize = 0};
         }
 
-        // Copy input to GPU
+        // Allocate arrays on GPU
         uint8_t *d_data;
         CHECK_CUDA(cudaMalloc(&d_data, sizeof(uint8_t) * size));
-        CHECK_CUDA(cudaMemcpy(d_data, data, sizeof(uint8_t) * size, cudaMemcpyHostToDevice));
-
-        // Allocate arrays on GPU
         size_t bitsSize = ceil(size * 1.0 / FRAME_LENGTH);
         uint8_t *d_outputBits;
         CHECK_CUDA(cudaMalloc(&d_outputBits, sizeof(uint8_t) * bitsSize));
         uint64_t *d_frameStartIndiciesBits;
         CHECK_CUDA(cudaMalloc(&d_frameStartIndiciesBits, sizeof(uint64_t) * bitsSize));
+
+        // Copy input to GPU
+        CHECK_CUDA(cudaMemcpy(d_data, data, sizeof(uint8_t) * size, cudaMemcpyHostToDevice));
 
         // Calculate outputBits
         constexpr size_t outputBitsThreadsPerBlock = BLOCK_SIZE;
@@ -124,6 +124,81 @@ namespace FixedLength
             .inputSize = size};
     }
 
+    FLDecompressed gpuDecompress(size_t outputSize, uint8_t *bits, size_t bitsSize, uint8_t *values, size_t valuesSize)
+    {
+        if (valuesSize == 0 || bitsSize == 0 || outputSize == 0)
+        {
+            return FLDecompressed{
+                .data = nullptr,
+                .size = 0};
+        }
+
+        // Allocate arrayn on CPU
+        uint8_t *data = reinterpret_cast<uint8_t *>(malloc(sizeof(uint8_t) * outputSize));
+        if (data == nullptr)
+        {
+            throw std::runtime_error("Cannot allocate memory");
+        }
+
+        // Allocate arrays on GPU
+        uint8_t *d_bits;
+        CHECK_CUDA(cudaMalloc(&d_bits, sizeof(uint8_t) * bitsSize));
+        uint8_t *d_values;
+        CHECK_CUDA(cudaMalloc(&d_values, sizeof(uint8_t) * valuesSize));
+        uint64_t *d_frameStartIndiciesBits;
+        CHECK_CUDA(cudaMalloc(&d_frameStartIndiciesBits, sizeof(uint64_t) * bitsSize));
+        uint8_t *d_data;
+        CHECK_CUDA(cudaMalloc(&d_data, sizeof(uint8_t) * outputSize));
+
+        // Copy input to GPU
+        CHECK_CUDA(cudaMemcpy(d_bits, bits, sizeof(uint8_t) * bitsSize, cudaMemcpyHostToDevice));
+        CHECK_CUDA(cudaMemcpy(d_values, values, sizeof(uint8_t) * valuesSize, cudaMemcpyHostToDevice));
+
+        // Calculate frameStartIndiciesBits
+        constexpr size_t frameStartIndiciesThreadsPerBlock = BLOCK_SIZE;
+        const size_t frameStartIndiciesBlocksCount = ceil(bitsSize * 1.0 / frameStartIndiciesThreadsPerBlock);
+        compressInitializeFrameStartIndiciesBits<<<frameStartIndiciesBlocksCount, frameStartIndiciesThreadsPerBlock>>>(d_frameStartIndiciesBits, d_bits, bitsSize);
+        CHECK_CUDA(cudaDeviceSynchronize());
+        CHECK_CUDA(cudaGetLastError());
+        compressCalculateFrameStartIndiciesBits(d_frameStartIndiciesBits, bitsSize);
+
+        // FIXME: remove me, only for testing
+        {
+            uint64_t *frameStartIndiciesBitsCPU = reinterpret_cast<uint64_t *>(malloc(sizeof(uint64_t) * bitsSize));
+            CHECK_CUDA(cudaMemcpy(frameStartIndiciesBitsCPU, d_frameStartIndiciesBits, sizeof(uint64_t) * bitsSize, cudaMemcpyDeviceToHost));
+            printf("frameStartIndiciesBits: \n");
+            for (size_t i = 0; i < bitsSize; i++)
+            {
+                printf("%lu\n", frameStartIndiciesBitsCPU[i]);
+            }
+        }
+
+        // FIXME: remove me, only for testign
+        {
+            printf("output SIZE: %llu\n", outputSize);
+        }
+
+        // Calculate output
+        constexpr size_t outputThreadsPerBlock = BLOCK_SIZE;
+        const size_t outputBlocksCount = ceil(outputSize * 1.0 / outputThreadsPerBlock);
+        decompressCalculateOutput<<<outputBlocksCount, outputThreadsPerBlock>>>(d_data, outputSize, d_bits, bitsSize, d_values, valuesSize, d_frameStartIndiciesBits);
+        CHECK_CUDA(cudaDeviceSynchronize());
+        CHECK_CUDA(cudaGetLastError());
+
+        // Copy result to CPU
+        CHECK_CUDA(cudaMemcpy(data, d_data, sizeof(uint8_t) * outputSize, cudaMemcpyDeviceToHost));
+
+        // Deallocate GPU arrays
+        cudaFree(d_bits);
+        cudaFree(d_values);
+        cudaFree(d_frameStartIndiciesBits);
+        cudaFree(d_data);
+
+        return FLDecompressed{
+            .data = data,
+            .size = outputSize};
+    }
+
     // Kernels
     __global__ void compressCalculateOutputBits(uint8_t *d_data, size_t size, uint8_t *d_outputBits, size_t bitsSize)
     {
@@ -212,6 +287,35 @@ namespace FixedLength
 
         // Save result to global memory
         // TODO:
+    }
+
+    __global__ void decompressCalculateOutput(uint8_t *d_data, size_t size, uint8_t *d_bits, size_t bitsSize, uint8_t *d_values, size_t valuesSize, uint64_t *d_frameStartIndiciesBits)
+    {
+        auto threadId = blockDim.x * blockIdx.x + threadIdx.x;
+        // Don't follow if threadId is outside of data scope
+        if (threadId >= size)
+        {
+            return;
+        }
+
+        // Decode data
+        uint64_t frameId = threadId / FRAME_LENGTH;
+        uint64_t frameElementId = threadId % FRAME_LENGTH;
+        uint8_t usedBits = d_bits[frameId];
+        uint64_t bitsOffset = d_frameStartIndiciesBits[frameId] + frameElementId * usedBits;
+        size_t inputId = bitsOffset / 8;
+        uint8_t inputOffset = bitsOffset % 8;
+        uint8_t mask = (1 << usedBits) - 1;
+        uint8_t decodedValue = (d_values[inputId] >> inputOffset) & mask;
+        // If it overflow decode the overflowed part of the next byte
+        if (inputOffset + usedBits > 8)
+        {
+            uint8_t overflowBits = inputOffset + usedBits - 8;
+            uint8_t overflowMask = (1 << overflowBits) - 1;
+            uint8_t overflowValue = (d_values[inputId + 1] & overflowMask) << (usedBits - overflowBits);
+            decodedValue |= overflowValue;
+        }
+        d_data[threadId] = decodedValue;
     }
 
     // Helpers

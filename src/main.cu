@@ -125,7 +125,7 @@ int main(int argc, char **argv)
     // auto result2 = FixedLength::gpuCompress(data2, size2);
     // printf("\n\n");
 
-    constexpr size_t size = 128;
+    constexpr size_t size = 10000;
     uint8_t data[size];
 
     for (size_t i = 0; i < size; i++)
@@ -141,7 +141,7 @@ int main(int argc, char **argv)
         printf("%b\n", result.outputValues[i]);
     }
 
-    auto decompressed = FixedLength::cpuDecompress(result.inputSize, result.outputBits, result.bitsSize, result.outputValues, result.valuesSize);
+    auto decompressed = FixedLength::gpuDecompress(result.inputSize, result.outputBits, result.bitsSize, result.outputValues, result.valuesSize);
 
     if (size != decompressed.size)
     {
@@ -157,6 +157,20 @@ int main(int argc, char **argv)
     }
 
     printf("actually ok\n");
+
+    // size_t bitsCount = 1;
+    // size_t valuesCount = 3;
+    // uint8_t bits[] = {3};
+    // uint8_t values[] = {0b11010001, 0b01011000, 0b00011111};
+    // size_t outputSize = 7;
+
+    // auto result = FixedLength::gpuDecompress(outputSize, bits, bitsCount, values, valuesCount);
+
+    // printf("SIZE: %llu\n", result.size);
+    // for (size_t i = 0; i < result.size; i++)
+    // {
+    //     printf("value: %hhu\n", result.data[i]);
+    // }
 
     return 0;
 }
