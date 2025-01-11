@@ -517,7 +517,7 @@ void test_fl_cpu_compression_decompression_random(void)
     uint8_t data[10000];
     for (size_t i = 0; i < 10000; i++)
     {
-        data[i] = rand() % 256; // 110
+        data[i] = rand() % 256;
     }
     size_t dataSize = 10000;
 

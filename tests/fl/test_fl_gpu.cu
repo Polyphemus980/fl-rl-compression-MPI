@@ -298,7 +298,292 @@ void test_fl_gpu_compression_more_than_one_block(void)
     TEST_ARRAYS_EQUAL(expectedValues, result.outputValues, expectedValuesCount, "%hhu");
 }
 
-// Add test for compression that will be bigger than one block
+// Decompressions
+void test_fl_gpu_decompression_simple_example(void)
+{
+    size_t bitsCount = 1;
+    size_t valuesCount = 3;
+    uint8_t bits[] = {3};
+    uint8_t values[] = {0b11010001, 0b01011000, 0b00011111};
+    size_t outputSize = 7;
+
+    auto result = FixedLength::gpuDecompress(outputSize, bits, bitsCount, values, valuesCount);
+
+    uint8_t expectedData[] = {1, 2, 3, 4, 5, 6, 7};
+    size_t expectedSize = 7;
+
+    TEST_CHECK_(result.size == expectedSize, "%zu is equal to %zu", result.size, expectedSize);
+    TEST_ARRAYS_EQUAL(expectedData, result.data, expectedSize, "%hhu");
+}
+
+void test_fl_gpu_decompression_single_element(void)
+{
+    size_t bitsCount = 1;
+    size_t valuesCount = 1;
+    uint8_t bits[] = {8};
+    uint8_t values[] = {0b11111111};
+    size_t outputSize = 1;
+
+    auto result = FixedLength::gpuDecompress(outputSize, bits, bitsCount, values, valuesCount);
+
+    uint8_t expectedData[] = {255};
+    size_t expectedSize = 1;
+
+    TEST_CHECK_(result.size == expectedSize, "%zu is equal to %zu", result.size, expectedSize);
+    TEST_ARRAYS_EQUAL(expectedData, result.data, expectedSize, "%hhu");
+}
+
+void test_fl_gpu_decompression_single_frame_partial(void)
+{
+    size_t bitsCount = 1;
+    size_t valuesCount = 3;
+    uint8_t bits[] = {4};
+    uint8_t values[] = {0b00111010, 0b11001111, 0b00001000};
+    size_t outputSize = 5;
+
+    auto result = FixedLength::gpuDecompress(outputSize, bits, bitsCount, values, valuesCount);
+
+    uint8_t expectedData[] = {10, 3, 15, 12, 8};
+    size_t expectedSize = 5;
+
+    TEST_CHECK_(result.size == expectedSize, "%zu is equal to %zu", result.size, expectedSize);
+    TEST_ARRAYS_EQUAL(expectedData, result.data, expectedSize, "%hhu");
+}
+
+void test_fl_gpu_decompression_two_frames(void)
+{
+    size_t bitsCount = 2;
+    size_t valuesCount = 112; // (128 * 3 + 128 * 4) / 8
+    uint8_t bits[] = {3, 4};
+
+    uint8_t values[112] = {0};
+
+    // Only 6s
+    for (size_t i = 0; i < 48; i += 3)
+    {
+        values[i] = 0b10110110;
+        if (i + 1 < 48)
+        {
+            values[i + 1] = 0b01101101;
+        }
+        if (i + 2 < 48)
+        {
+            values[i + 2] = 0b11011011;
+        }
+    }
+
+    // Only 11s
+    for (size_t i = 48; i < 112; i++)
+    {
+        values[i] = 0b10111011;
+    }
+
+    size_t outputSize = 256;
+
+    auto result = FixedLength::gpuDecompress(outputSize, bits, bitsCount, values, valuesCount);
+
+    uint8_t expectedData[256];
+    for (size_t i = 0; i < 128; i++)
+    {
+        expectedData[i] = 6;
+    }
+    for (size_t i = 128; i < 256; i++)
+    {
+        expectedData[i] = 11;
+    }
+
+    TEST_CHECK_(result.size == outputSize, "%zu is equal to %zu", result.size, outputSize);
+    TEST_ARRAYS_EQUAL(expectedData, result.data, outputSize, "%hhu");
+}
+
+void test_fl_gpu_decompression_last_frame_not_full(void)
+{
+    size_t bitsCount = 2;
+    size_t valuesCount = 49; // (128 * 3 + 5) / 8
+    uint8_t bits[] = {3, 5};
+    uint8_t values[49];
+
+    // Only 6s
+    for (size_t i = 0; i < 48; i += 3)
+    {
+        values[i] = 0b10110110;
+        if (i + 1 < 48)
+        {
+            values[i + 1] = 0b01101101;
+        }
+        if (i + 2 < 48)
+        {
+            values[i + 2] = 0b11011011;
+        }
+    }
+    // 16 at the end
+    values[48] = 0b00010000;
+
+    size_t outputSize = 129;
+
+    auto result = FixedLength::gpuDecompress(outputSize, bits, bitsCount, values, valuesCount);
+
+    uint8_t expectedData[129];
+    for (size_t i = 0; i < 128; i++)
+    {
+        expectedData[i] = 6;
+    }
+    expectedData[128] = 16;
+
+    TEST_CHECK_(result.size == outputSize, "%zu is equal to %zu", result.size, outputSize);
+    TEST_ARRAYS_EQUAL(expectedData, result.data, outputSize, "%hhu");
+}
+
+// Compression + Decompression
+
+void test_fl_gpu_compression_decompression_simple_example(void)
+{
+    uint8_t data[] = {1, 2, 3, 4, 5, 6, 7};
+    size_t dataSize = 7;
+
+    auto compressed = FixedLength::gpuCompress(data, dataSize);
+    auto decompressed = FixedLength::gpuDecompress(compressed.inputSize, compressed.outputBits, compressed.bitsSize, compressed.outputValues, compressed.valuesSize);
+    TEST_CHECK_(decompressed.size == dataSize, "%zu is equal to %zu", decompressed.size, dataSize);
+    TEST_ARRAYS_EQUAL(data, decompressed.data, dataSize, "%hhu");
+}
+
+void test_fl_gpu_compression_decompression_all_zeroes(void)
+{
+    uint8_t data[] = {0, 0, 0, 0, 0, 0, 0, 0};
+    size_t dataSize = 8;
+
+    auto compressed = FixedLength::gpuCompress(data, dataSize);
+    auto decompressed = FixedLength::gpuDecompress(compressed.inputSize, compressed.outputBits, compressed.bitsSize, compressed.outputValues, compressed.valuesSize);
+    TEST_CHECK_(decompressed.size == dataSize, "%zu is equal to %zu", decompressed.size, dataSize);
+    TEST_ARRAYS_EQUAL(data, decompressed.data, dataSize, "%hhu");
+}
+
+void test_fl_gpu_compression_decompression_all_ones(void)
+{
+    uint8_t data[] = {255, 255, 255, 255};
+    size_t dataSize = 4;
+
+    auto compressed = FixedLength::gpuCompress(data, dataSize);
+    auto decompressed = FixedLength::gpuDecompress(compressed.inputSize, compressed.outputBits, compressed.bitsSize, compressed.outputValues, compressed.valuesSize);
+    TEST_CHECK_(decompressed.size == dataSize, "%zu is equal to %zu", decompressed.size, dataSize);
+    TEST_ARRAYS_EQUAL(data, decompressed.data, dataSize, "%hhu");
+}
+
+void test_fl_gpu_compression_decompression_mixed_values(void)
+{
+    uint8_t data[] = {128, 64, 32, 16, 8, 4, 2, 1};
+    size_t dataSize = 8;
+
+    auto compressed = FixedLength::gpuCompress(data, dataSize);
+    auto decompressed = FixedLength::gpuDecompress(compressed.inputSize, compressed.outputBits, compressed.bitsSize, compressed.outputValues, compressed.valuesSize);
+    TEST_CHECK_(decompressed.size == dataSize, "%zu is equal to %zu", decompressed.size, dataSize);
+    TEST_ARRAYS_EQUAL(data, decompressed.data, dataSize, "%hhu");
+}
+
+void test_fl_gpu_compression_decompression_single_value(void)
+{
+    uint8_t data[] = {42};
+    size_t dataSize = 1;
+
+    auto compressed = FixedLength::gpuCompress(data, dataSize);
+    auto decompressed = FixedLength::gpuDecompress(compressed.inputSize, compressed.outputBits, compressed.bitsSize, compressed.outputValues, compressed.valuesSize);
+    TEST_CHECK_(decompressed.size == dataSize, "%zu is equal to %zu", decompressed.size, dataSize);
+    TEST_ARRAYS_EQUAL(data, decompressed.data, dataSize, "%hhu");
+}
+
+void test_fl_gpu_compression_decompression_two_frames(void)
+{
+    uint8_t data[130];
+    for (size_t i = 0; i < 130; i++)
+    {
+        data[i] = i % 4;
+    }
+    size_t dataSize = 130;
+
+    auto compressed = FixedLength::gpuCompress(data, dataSize);
+    auto decompressed = FixedLength::gpuDecompress(compressed.inputSize, compressed.outputBits, compressed.bitsSize, compressed.outputValues, compressed.valuesSize);
+    TEST_CHECK_(decompressed.size == dataSize, "%zu is equal to %zu", decompressed.size, dataSize);
+    TEST_ARRAYS_EQUAL(data, decompressed.data, dataSize, "%hhu");
+}
+
+void test_fl_gpu_compression_decompression_three_frames(void)
+{
+    uint8_t data[384]; // 3 * 128
+    for (size_t i = 0; i < 384; i++)
+    {
+        data[i] = i % 16; // Values 0-15 repeating
+    }
+    size_t dataSize = 384;
+
+    auto compressed = FixedLength::gpuCompress(data, dataSize);
+    auto decompressed = FixedLength::gpuDecompress(compressed.inputSize, compressed.outputBits, compressed.bitsSize, compressed.outputValues, compressed.valuesSize);
+    TEST_CHECK_(decompressed.size == dataSize, "%zu is equal to %zu", decompressed.size, dataSize);
+    TEST_ARRAYS_EQUAL(data, decompressed.data, dataSize, "%hhu");
+}
+
+void test_fl_gpu_compression_decompression_partial_last_frame(void)
+{
+    uint8_t data[250];
+    for (size_t i = 0; i < 250; i++)
+    {
+        data[i] = 1;
+    }
+    size_t dataSize = 250;
+
+    auto compressed = FixedLength::gpuCompress(data, dataSize);
+    auto decompressed = FixedLength::gpuDecompress(compressed.inputSize, compressed.outputBits, compressed.bitsSize, compressed.outputValues, compressed.valuesSize);
+    TEST_CHECK_(decompressed.size == dataSize, "%zu is equal to %zu", decompressed.size, dataSize);
+    TEST_ARRAYS_EQUAL(data, decompressed.data, dataSize, "%hhu");
+}
+
+void test_fl_gpu_compression_decompression_different_bits_per_frame(void)
+{
+    uint8_t data[256]; // 2 full frames
+    for (size_t i = 0; i < 128; i++)
+    {
+        data[i] = 6; // 110
+    }
+    for (size_t i = 128; i < 256; i++)
+    {
+        data[i] = 11; // 1011
+    }
+    size_t dataSize = 256;
+
+    auto compressed = FixedLength::gpuCompress(data, dataSize);
+    auto decompressed = FixedLength::gpuDecompress(compressed.inputSize, compressed.outputBits, compressed.bitsSize, compressed.outputValues, compressed.valuesSize);
+    TEST_CHECK_(decompressed.size == dataSize, "%zu is equal to %zu", decompressed.size, dataSize);
+    TEST_ARRAYS_EQUAL(data, decompressed.data, dataSize, "%hhu");
+}
+
+void test_fl_gpu_compression_decompression_random(void)
+{
+    uint8_t data[10000];
+    for (size_t i = 0; i < 10000; i++)
+    {
+        data[i] = rand() % 256;
+    }
+    size_t dataSize = 10000;
+
+    auto compressed = FixedLength::gpuCompress(data, dataSize);
+    auto decompressed = FixedLength::gpuDecompress(compressed.inputSize, compressed.outputBits, compressed.bitsSize, compressed.outputValues, compressed.valuesSize);
+    TEST_CHECK_(decompressed.size == dataSize, "%zu is equal to %zu", decompressed.size, dataSize);
+    TEST_ARRAYS_EQUAL(data, decompressed.data, dataSize, "%hhu");
+}
+
+void test_fl_gpu_compression_decompression_random_2(void)
+{
+    uint8_t data[1000000];
+    for (size_t i = 0; i < 1000000; i++)
+    {
+        data[i] = rand() % 256;
+    }
+    size_t dataSize = 1000000;
+
+    auto compressed = FixedLength::gpuCompress(data, dataSize);
+    auto decompressed = FixedLength::gpuDecompress(compressed.inputSize, compressed.outputBits, compressed.bitsSize, compressed.outputValues, compressed.valuesSize);
+    TEST_CHECK_(decompressed.size == dataSize, "%zu is equal to %zu", decompressed.size, dataSize);
+    TEST_ARRAYS_EQUAL(data, decompressed.data, dataSize, "%hhu");
+}
 
 TEST_LIST = {
     // Compressions
@@ -312,4 +597,22 @@ TEST_LIST = {
     {"test_fl_gpu_compression_partial_last_frame", test_fl_gpu_compression_partial_last_frame},
     {"test_fl_gpu_compression_different_bits_per_frame", test_fl_gpu_compression_different_bits_per_frame},
     {"test_fl_gpu_compression_more_than_one_block", test_fl_gpu_compression_more_than_one_block},
+    // Decompressions
+    {"test_fl_cpu_decompression_simple_example", test_fl_gpu_decompression_simple_example},
+    {"test_fl_gpu_decompression_single_element", test_fl_gpu_decompression_single_element},
+    {"test_fl_gpu_decompression_single_frame_partial", test_fl_gpu_decompression_single_frame_partial},
+    {"test_fl_gpu_decompression_two_frames", test_fl_gpu_decompression_two_frames},
+    {"test_fl_gpu_decompression_last_frame_not_full", test_fl_gpu_decompression_last_frame_not_full},
+    // Compression + Decompression
+    {"test_fl_gpu_compression_decompression_simple_example", test_fl_gpu_compression_decompression_simple_example},
+    {"test_fl_gpu_compression_decompression_all_zeroes", test_fl_gpu_compression_decompression_all_zeroes},
+    {"test_fl_gpu_compression_decompression_all_ones", test_fl_gpu_compression_decompression_all_ones},
+    {"test_fl_gpu_compression_decompression_mixed_values", test_fl_gpu_compression_decompression_mixed_values},
+    {"test_fl_gpu_compression_decompression_single_value", test_fl_gpu_compression_decompression_single_value},
+    {"test_fl_gpu_compression_decompression_two_frames", test_fl_gpu_compression_decompression_two_frames},
+    {"test_fl_gpu_compression_decompression_three_frames", test_fl_gpu_compression_decompression_three_frames},
+    {"test_fl_gpu_compression_decompression_partial_last_frame", test_fl_gpu_compression_decompression_partial_last_frame},
+    {"test_fl_gpu_compression_decompression_different_bits_per_frame", test_fl_gpu_compression_decompression_different_bits_per_frame},
+    {"test_fl_gpu_compression_decompression_random", test_fl_gpu_compression_decompression_random},
+    {"test_fl_gpu_compression_decompression_random_2", test_fl_gpu_compression_decompression_random_2},
     {nullptr, nullptr}};
