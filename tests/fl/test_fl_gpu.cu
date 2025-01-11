@@ -255,6 +255,51 @@ void test_fl_gpu_compression_different_bits_per_frame(void)
     TEST_ARRAYS_EQUAL(expectedValues, result.outputValues, expectedValuesCount, "%hhu");
 }
 
+void test_fl_gpu_compression_more_than_one_block(void)
+{
+    constexpr size_t size = 1100;
+    uint8_t data[size];
+
+    for (size_t i = 0; i < 1024; i++)
+    {
+        data[i] = 12; // 1100
+    }
+
+    for (size_t i = 1024; i < size; i++)
+    {
+        data[i] = 2; // 10
+    }
+
+    auto result = FixedLength::gpuCompress(data, size);
+
+    constexpr size_t expectedBitsCount = 9;
+    uint8_t expectedBits[expectedBitsCount];
+    for (size_t i = 0; i < 8; i++)
+    {
+        expectedBits[i] = 4;
+    }
+    expectedBits[8] = 2;
+
+    constexpr size_t expectedValuesCount = (1024 / 2) + (76 / 4);
+    uint8_t expectedValues[expectedValuesCount];
+    for (size_t i = 0; i < 512; i++)
+    {
+        expectedValues[i] = 0b11001100;
+    }
+    for (size_t i = 512; i < expectedValuesCount; i++)
+    {
+        expectedValues[i] = 0b10101010;
+    }
+
+    TEST_CHECK_(result.inputSize == size, "%zu is equal to %zu", result.inputSize, size);
+    TEST_CHECK_(result.bitsSize == expectedBitsCount, "%zu is equal to %zu", result.bitsSize, expectedBitsCount);
+    TEST_CHECK_(result.valuesSize == expectedValuesCount, "%zu is equal to %zu", result.valuesSize, expectedValuesCount);
+    TEST_ARRAYS_EQUAL(expectedBits, result.outputBits, expectedBitsCount, "%hhu");
+    TEST_ARRAYS_EQUAL(expectedValues, result.outputValues, expectedValuesCount, "%hhu");
+}
+
+// Add test for compression that will be bigger than one block
+
 TEST_LIST = {
     // Compressions
     {"test_fl_gpu_compression_simple_example", test_fl_gpu_compression_simple_example},
@@ -266,4 +311,5 @@ TEST_LIST = {
     {"test_fl_gpu_compression_three_frames", test_fl_gpu_compression_three_frames},
     {"test_fl_gpu_compression_partial_last_frame", test_fl_gpu_compression_partial_last_frame},
     {"test_fl_gpu_compression_different_bits_per_frame", test_fl_gpu_compression_different_bits_per_frame},
+    {"test_fl_gpu_compression_more_than_one_block", test_fl_gpu_compression_more_than_one_block},
     {nullptr, nullptr}};
