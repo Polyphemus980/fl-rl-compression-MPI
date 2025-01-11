@@ -4,6 +4,8 @@
 
 #include "fl_gpu.cuh"
 #include "../utils.cuh"
+#include "../timers/cpu_timer.cuh"
+#include "../timers/gpu_timer.cuh"
 
 namespace FixedLength
 {
@@ -20,6 +22,11 @@ namespace FixedLength
                 .inputSize = 0};
         }
 
+        Timers::CpuTimer cpuTimer;
+        Timers::GpuTimer gpuTimer;
+
+        gpuTimer.start();
+
         // Allocate arrays on GPU
         uint8_t *d_data;
         CHECK_CUDA(cudaMalloc(&d_data, sizeof(uint8_t) * size));
@@ -29,8 +36,18 @@ namespace FixedLength
         uint64_t *d_frameStartIndiciesBits;
         CHECK_CUDA(cudaMalloc(&d_frameStartIndiciesBits, sizeof(uint64_t) * bitsSize));
 
+        gpuTimer.end();
+        gpuTimer.printResult("Allocate arrays on GPU");
+
+        gpuTimer.start();
+
         // Copy input to GPU
         CHECK_CUDA(cudaMemcpy(d_data, data, sizeof(uint8_t) * size, cudaMemcpyHostToDevice));
+
+        gpuTimer.end();
+        gpuTimer.printResult("Copy input data to GPU");
+
+        gpuTimer.start();
 
         // Calculate outputBits
         constexpr size_t outputBitsThreadsPerBlock = BLOCK_SIZE;
@@ -38,18 +55,6 @@ namespace FixedLength
         compressCalculateOutputBits<<<outputBitsBlocksCount, outputBitsThreadsPerBlock>>>(d_data, size, d_outputBits, bitsSize);
         CHECK_CUDA(cudaDeviceSynchronize());
         CHECK_CUDA(cudaGetLastError());
-
-        // FIXME: remove me, only for testing
-        {
-            uint8_t *outputBitsCPU = reinterpret_cast<uint8_t *>(malloc(sizeof(uint8_t) * bitsSize));
-            CHECK_CUDA(cudaMemcpy(outputBitsCPU, d_outputBits, sizeof(uint8_t) * bitsSize, cudaMemcpyDeviceToHost));
-            printf("bits size: %lu\n", bitsSize);
-            printf("output Bits: \n");
-            for (size_t i = 0; i < bitsSize; i++)
-            {
-                printf("%hhu\n", outputBitsCPU[i]);
-            }
-        }
 
         // Calculate frameStartIndiciesBits
         constexpr size_t frameStartIndiciesThreadsPerBlock = BLOCK_SIZE;
@@ -59,17 +64,6 @@ namespace FixedLength
         CHECK_CUDA(cudaGetLastError());
         compressCalculateFrameStartIndiciesBits(d_frameStartIndiciesBits, bitsSize);
 
-        // FIXME: remove me, only for testing
-        {
-            uint64_t *frameStartIndiciesBitsCPU = reinterpret_cast<uint64_t *>(malloc(sizeof(uint64_t) * bitsSize));
-            CHECK_CUDA(cudaMemcpy(frameStartIndiciesBitsCPU, d_frameStartIndiciesBits, sizeof(uint64_t) * bitsSize, cudaMemcpyDeviceToHost));
-            printf("frameStartIndiciesBits: \n");
-            for (size_t i = 0; i < bitsSize; i++)
-            {
-                printf("%lu\n", frameStartIndiciesBitsCPU[i]);
-            }
-        }
-
         // Calculate length of outputValues array
         uint8_t outputBitsLast = 0;
         CHECK_CUDA(cudaMemcpy(&outputBitsLast, &d_outputBits[bitsSize - 1], sizeof(uint8_t), cudaMemcpyDeviceToHost));
@@ -77,11 +71,6 @@ namespace FixedLength
         CHECK_CUDA(cudaMemcpy(&frameStartIndiciesBitsLast, &d_frameStartIndiciesBits[bitsSize - 1], sizeof(uint64_t), cudaMemcpyDeviceToHost));
         uint64_t lastFrameElementCount = size % FRAME_LENGTH == 0 ? FRAME_LENGTH : (size - (size / FRAME_LENGTH) * FRAME_LENGTH);
         size_t valuesSize = ceil((frameStartIndiciesBitsLast + lastFrameElementCount * outputBitsLast) * 1.0 / 8);
-
-        // FIXME: remove me, only for testing
-        {
-            printf("values size: %lu\n", valuesSize);
-        }
 
         // Allocate gpu array for `outputValues`
         uint8_t *d_outputValues;
@@ -93,6 +82,11 @@ namespace FixedLength
         compressCalculateOutput<<<outputValuesBlocksCount, outputValuesThreadsPerBlock>>>(d_data, size, d_outputBits, bitsSize, d_frameStartIndiciesBits, d_outputValues, valuesSize);
         CHECK_CUDA(cudaDeviceSynchronize());
         CHECK_CUDA(cudaGetLastError());
+
+        gpuTimer.end();
+        gpuTimer.printResult("Compression");
+
+        cpuTimer.start();
 
         // Allocate arrays on CPU
         uint8_t *outputBits = reinterpret_cast<uint8_t *>(malloc(sizeof(uint8_t) * bitsSize));
@@ -106,15 +100,28 @@ namespace FixedLength
             throw std::runtime_error("Cannot allocate memory");
         }
 
+        cpuTimer.end();
+        cpuTimer.printResult("Allocate arrays on CPU");
+
+        gpuTimer.start();
+
         // Copy results to CPU
         CHECK_CUDA(cudaMemcpy(outputBits, d_outputBits, sizeof(uint8_t) * bitsSize, cudaMemcpyDeviceToHost));
         CHECK_CUDA(cudaMemcpy(outputValues, d_outputValues, sizeof(uint8_t) * valuesSize, cudaMemcpyDeviceToHost));
+
+        gpuTimer.end();
+        gpuTimer.printResult("Copy results to CPU");
+
+        gpuTimer.start();
 
         // Deallocate gpu arrays
         cudaFree(d_data);
         cudaFree(d_outputBits);
         cudaFree(d_frameStartIndiciesBits);
         cudaFree(d_outputValues);
+
+        gpuTimer.end();
+        gpuTimer.printResult("Deallocate ararys on GPU");
 
         return FLCompressed{
             .outputBits = outputBits,
@@ -133,12 +140,22 @@ namespace FixedLength
                 .size = 0};
         }
 
-        // Allocate arrayn on CPU
+        Timers::CpuTimer cpuTimer;
+        Timers::GpuTimer gpuTimer;
+
+        cpuTimer.start();
+
+        // Allocate array on CPU
         uint8_t *data = reinterpret_cast<uint8_t *>(malloc(sizeof(uint8_t) * outputSize));
         if (data == nullptr)
         {
             throw std::runtime_error("Cannot allocate memory");
         }
+
+        cpuTimer.end();
+        cpuTimer.printResult("Allocate arrays on CPU");
+
+        gpuTimer.start();
 
         // Allocate arrays on GPU
         uint8_t *d_bits;
@@ -150,9 +167,19 @@ namespace FixedLength
         uint8_t *d_data;
         CHECK_CUDA(cudaMalloc(&d_data, sizeof(uint8_t) * outputSize));
 
+        gpuTimer.end();
+        gpuTimer.printResult("Allocate arrays on GPU");
+
+        gpuTimer.start();
+
         // Copy input to GPU
         CHECK_CUDA(cudaMemcpy(d_bits, bits, sizeof(uint8_t) * bitsSize, cudaMemcpyHostToDevice));
         CHECK_CUDA(cudaMemcpy(d_values, values, sizeof(uint8_t) * valuesSize, cudaMemcpyHostToDevice));
+
+        gpuTimer.end();
+        gpuTimer.printResult("Copy input to GPU");
+
+        gpuTimer.start();
 
         // Calculate frameStartIndiciesBits
         constexpr size_t frameStartIndiciesThreadsPerBlock = BLOCK_SIZE;
@@ -162,22 +189,6 @@ namespace FixedLength
         CHECK_CUDA(cudaGetLastError());
         compressCalculateFrameStartIndiciesBits(d_frameStartIndiciesBits, bitsSize);
 
-        // FIXME: remove me, only for testing
-        {
-            uint64_t *frameStartIndiciesBitsCPU = reinterpret_cast<uint64_t *>(malloc(sizeof(uint64_t) * bitsSize));
-            CHECK_CUDA(cudaMemcpy(frameStartIndiciesBitsCPU, d_frameStartIndiciesBits, sizeof(uint64_t) * bitsSize, cudaMemcpyDeviceToHost));
-            printf("frameStartIndiciesBits: \n");
-            for (size_t i = 0; i < bitsSize; i++)
-            {
-                printf("%lu\n", frameStartIndiciesBitsCPU[i]);
-            }
-        }
-
-        // FIXME: remove me, only for testign
-        {
-            printf("output SIZE: %llu\n", outputSize);
-        }
-
         // Calculate output
         constexpr size_t outputThreadsPerBlock = BLOCK_SIZE;
         const size_t outputBlocksCount = ceil(outputSize * 1.0 / outputThreadsPerBlock);
@@ -185,14 +196,27 @@ namespace FixedLength
         CHECK_CUDA(cudaDeviceSynchronize());
         CHECK_CUDA(cudaGetLastError());
 
+        gpuTimer.end();
+        gpuTimer.printResult("Decompression");
+
+        gpuTimer.start();
+
         // Copy result to CPU
         CHECK_CUDA(cudaMemcpy(data, d_data, sizeof(uint8_t) * outputSize, cudaMemcpyDeviceToHost));
+
+        gpuTimer.end();
+        gpuTimer.printResult("Copy results to CPU");
+
+        gpuTimer.start();
 
         // Deallocate GPU arrays
         cudaFree(d_bits);
         cudaFree(d_values);
         cudaFree(d_frameStartIndiciesBits);
         cudaFree(d_data);
+
+        gpuTimer.end();
+        gpuTimer.printResult("Deallocate arrays on GPU");
 
         return FLDecompressed{
             .data = data,
@@ -231,7 +255,7 @@ namespace FixedLength
         atomicMaxUint8t(&s_outputBits[localFrameId], requiredBits);
         __syncthreads();
 
-        // Push results back to global memory
+        // Push results back to global memoryd_frameStartIndiciesBits
         auto globalId = blockIdx.x * FRAMES_PER_BLOCK + localThreadId;
         if (localThreadId < FRAMES_PER_BLOCK && globalId < bitsSize)
         {
@@ -255,7 +279,6 @@ namespace FixedLength
     __global__ void compressCalculateOutput(uint8_t *d_data, size_t size, uint8_t *d_outputBits, size_t bitsSize, uint64_t *d_frameStartIndiciesBits, uint8_t *d_outputValues, size_t valuesSize)
     {
         auto threadId = blockDim.x * blockIdx.x + threadIdx.x;
-        auto localThreadId = threadIdx.x;
 
         // Don't follow if threadId is outside of data scope
         if (threadId >= size)

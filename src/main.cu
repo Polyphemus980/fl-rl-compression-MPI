@@ -136,10 +136,10 @@ int main(int argc, char **argv)
     auto result = FixedLength::gpuCompress(data, size);
     printf("result size: %lu\n", result.valuesSize);
 
-    for (size_t i = 0; i < result.valuesSize; i++)
-    {
-        printf("%b\n", result.outputValues[i]);
-    }
+    // for (size_t i = 0; i < result.valuesSize; i++)
+    // {
+    //     printf("%b\n", result.outputValues[i]);
+    // }
 
     auto decompressed = FixedLength::gpuDecompress(result.inputSize, result.outputBits, result.bitsSize, result.outputValues, result.valuesSize);
 
