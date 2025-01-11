@@ -391,7 +391,141 @@ void test_fl_cpu_decompression_last_frame_not_full(void)
     TEST_ARRAYS_EQUAL(expectedData, result.data, outputSize, "%hhu");
 }
 
-// TODO: add tests that do both compression and then decompression
+// Compression + Decompression
+
+void test_fl_cpu_compression_decompression_simple_example(void)
+{
+    uint8_t data[] = {1, 2, 3, 4, 5, 6, 7};
+    size_t dataSize = 7;
+
+    auto compressed = FixedLength::cpuCompress(data, dataSize);
+    auto decompressed = FixedLength::cpuDecompress(compressed.inputSize, compressed.outputBits, compressed.bitsSize, compressed.outputValues, compressed.valuesSize);
+    TEST_CHECK_(decompressed.size == dataSize, "%zu is equal to %zu", decompressed.size, dataSize);
+    TEST_ARRAYS_EQUAL(data, decompressed.data, dataSize, "%hhu");
+}
+
+void test_fl_cpu_compression_decompression_all_zeroes(void)
+{
+    uint8_t data[] = {0, 0, 0, 0, 0, 0, 0, 0};
+    size_t dataSize = 8;
+
+    auto compressed = FixedLength::cpuCompress(data, dataSize);
+    auto decompressed = FixedLength::cpuDecompress(compressed.inputSize, compressed.outputBits, compressed.bitsSize, compressed.outputValues, compressed.valuesSize);
+    TEST_CHECK_(decompressed.size == dataSize, "%zu is equal to %zu", decompressed.size, dataSize);
+    TEST_ARRAYS_EQUAL(data, decompressed.data, dataSize, "%hhu");
+}
+
+void test_fl_cpu_compression_decompression_all_ones(void)
+{
+    uint8_t data[] = {255, 255, 255, 255};
+    size_t dataSize = 4;
+
+    auto compressed = FixedLength::cpuCompress(data, dataSize);
+    auto decompressed = FixedLength::cpuDecompress(compressed.inputSize, compressed.outputBits, compressed.bitsSize, compressed.outputValues, compressed.valuesSize);
+    TEST_CHECK_(decompressed.size == dataSize, "%zu is equal to %zu", decompressed.size, dataSize);
+    TEST_ARRAYS_EQUAL(data, decompressed.data, dataSize, "%hhu");
+}
+
+void test_fl_cpu_compression_decompression_mixed_values(void)
+{
+    uint8_t data[] = {128, 64, 32, 16, 8, 4, 2, 1};
+    size_t dataSize = 8;
+
+    auto compressed = FixedLength::cpuCompress(data, dataSize);
+    auto decompressed = FixedLength::cpuDecompress(compressed.inputSize, compressed.outputBits, compressed.bitsSize, compressed.outputValues, compressed.valuesSize);
+    TEST_CHECK_(decompressed.size == dataSize, "%zu is equal to %zu", decompressed.size, dataSize);
+    TEST_ARRAYS_EQUAL(data, decompressed.data, dataSize, "%hhu");
+}
+
+void test_fl_cpu_compression_decompression_single_value(void)
+{
+    uint8_t data[] = {42};
+    size_t dataSize = 1;
+
+    auto compressed = FixedLength::cpuCompress(data, dataSize);
+    auto decompressed = FixedLength::cpuDecompress(compressed.inputSize, compressed.outputBits, compressed.bitsSize, compressed.outputValues, compressed.valuesSize);
+    TEST_CHECK_(decompressed.size == dataSize, "%zu is equal to %zu", decompressed.size, dataSize);
+    TEST_ARRAYS_EQUAL(data, decompressed.data, dataSize, "%hhu");
+}
+
+void test_fl_cpu_compression_decompression_two_frames(void)
+{
+    uint8_t data[130];
+    for (size_t i = 0; i < 130; i++)
+    {
+        data[i] = i % 4;
+    }
+    size_t dataSize = 130;
+
+    auto compressed = FixedLength::cpuCompress(data, dataSize);
+    auto decompressed = FixedLength::cpuDecompress(compressed.inputSize, compressed.outputBits, compressed.bitsSize, compressed.outputValues, compressed.valuesSize);
+    TEST_CHECK_(decompressed.size == dataSize, "%zu is equal to %zu", decompressed.size, dataSize);
+    TEST_ARRAYS_EQUAL(data, decompressed.data, dataSize, "%hhu");
+}
+
+void test_fl_cpu_compression_decompression_three_frames(void)
+{
+    uint8_t data[384]; // 3 * 128
+    for (size_t i = 0; i < 384; i++)
+    {
+        data[i] = i % 16; // Values 0-15 repeating
+    }
+    size_t dataSize = 384;
+
+    auto compressed = FixedLength::cpuCompress(data, dataSize);
+    auto decompressed = FixedLength::cpuDecompress(compressed.inputSize, compressed.outputBits, compressed.bitsSize, compressed.outputValues, compressed.valuesSize);
+    TEST_CHECK_(decompressed.size == dataSize, "%zu is equal to %zu", decompressed.size, dataSize);
+    TEST_ARRAYS_EQUAL(data, decompressed.data, dataSize, "%hhu");
+}
+
+void test_fl_cpu_compression_decompression_partial_last_frame(void)
+{
+    uint8_t data[250];
+    for (size_t i = 0; i < 250; i++)
+    {
+        data[i] = 1;
+    }
+    size_t dataSize = 250;
+
+    auto compressed = FixedLength::cpuCompress(data, dataSize);
+    auto decompressed = FixedLength::cpuDecompress(compressed.inputSize, compressed.outputBits, compressed.bitsSize, compressed.outputValues, compressed.valuesSize);
+    TEST_CHECK_(decompressed.size == dataSize, "%zu is equal to %zu", decompressed.size, dataSize);
+    TEST_ARRAYS_EQUAL(data, decompressed.data, dataSize, "%hhu");
+}
+
+void test_fl_cpu_compression_decompression_different_bits_per_frame(void)
+{
+    uint8_t data[256]; // 2 full frames
+    for (size_t i = 0; i < 128; i++)
+    {
+        data[i] = 6; // 110
+    }
+    for (size_t i = 128; i < 256; i++)
+    {
+        data[i] = 11; // 1011
+    }
+    size_t dataSize = 256;
+
+    auto compressed = FixedLength::cpuCompress(data, dataSize);
+    auto decompressed = FixedLength::cpuDecompress(compressed.inputSize, compressed.outputBits, compressed.bitsSize, compressed.outputValues, compressed.valuesSize);
+    TEST_CHECK_(decompressed.size == dataSize, "%zu is equal to %zu", decompressed.size, dataSize);
+    TEST_ARRAYS_EQUAL(data, decompressed.data, dataSize, "%hhu");
+}
+
+void test_fl_cpu_compression_decompression_random(void)
+{
+    uint8_t data[10000];
+    for (size_t i = 0; i < 10000; i++)
+    {
+        data[i] = rand() % 256; // 110
+    }
+    size_t dataSize = 10000;
+
+    auto compressed = FixedLength::cpuCompress(data, dataSize);
+    auto decompressed = FixedLength::cpuDecompress(compressed.inputSize, compressed.outputBits, compressed.bitsSize, compressed.outputValues, compressed.valuesSize);
+    TEST_CHECK_(decompressed.size == dataSize, "%zu is equal to %zu", decompressed.size, dataSize);
+    TEST_ARRAYS_EQUAL(data, decompressed.data, dataSize, "%hhu");
+}
 
 TEST_LIST = {
     // Compressions
@@ -410,4 +544,15 @@ TEST_LIST = {
     {"test_fl_cpu_decompression_single_frame_partial", test_fl_cpu_decompression_single_frame_partial},
     {"test_fl_cpu_decompression_two_frames", test_fl_cpu_decompression_two_frames},
     {"test_fl_cpu_decompression_last_frame_not_full", test_fl_cpu_decompression_last_frame_not_full},
+    // Compression + Decompression
+    {"test_fl_cpu_compression_decompression_simple_example", test_fl_cpu_compression_decompression_simple_example},
+    {"test_fl_cpu_compression_decompression_all_zeroes", test_fl_cpu_compression_decompression_all_zeroes},
+    {"test_fl_cpu_compression_decompression_all_ones", test_fl_cpu_compression_decompression_all_ones},
+    {"test_fl_cpu_compression_decompression_mixed_values", test_fl_cpu_compression_decompression_mixed_values},
+    {"test_fl_cpu_compression_decompression_single_value", test_fl_cpu_compression_decompression_single_value},
+    {"test_fl_cpu_compression_decompression_two_frames", test_fl_cpu_compression_decompression_two_frames},
+    {"test_fl_cpu_compression_decompression_three_frames", test_fl_cpu_compression_decompression_three_frames},
+    {"test_fl_cpu_compression_decompression_partial_last_frame", test_fl_cpu_compression_decompression_partial_last_frame},
+    {"test_fl_cpu_compression_decompression_different_bits_per_frame", test_fl_cpu_compression_decompression_different_bits_per_frame},
+    {"test_fl_cpu_compression_decompression_random", test_fl_cpu_compression_decompression_random},
     {nullptr, nullptr}};
