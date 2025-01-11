@@ -1,0 +1,199 @@
+#include <cstdio>
+#include <cstdlib>
+#include <stdexcept>
+
+#include "file_io.cuh"
+
+namespace FileIO
+{
+    FileData::FileData(uint8_t *data, size_t size)
+    {
+        this->data = data;
+        this->size = size;
+    }
+
+    FileData::FileData(FixedLength::FLDecompressed flDecompressed)
+    {
+        data = flDecompressed.data;
+        size = flDecompressed.size;
+    }
+
+    FileData::FileData(RunLength::RLDecompressed rlDecompressed)
+    {
+        data = rlDecompressed.data;
+        size = rlDecompressed.size;
+    }
+
+    FileData loadFile(const char *path)
+    {
+        // Open file
+        FILE *file = fopen(path, "rb");
+        if (file == nullptr)
+        {
+            throw std::runtime_error("[FileIO] Cannot open file");
+        }
+
+        // Check file size
+        fseek(file, 0, SEEK_END);
+        size_t fileSize = ftell(file);
+        fseek(file, 0, SEEK_SET);
+
+        // Allocate memory for file data
+        uint8_t *fileData = reinterpret_cast<uint8_t *>(malloc(sizeof(uint8_t) * fileSize));
+        if (fileData == nullptr)
+        {
+            fclose(file);
+            throw std::runtime_error("[FileIO] Cannot allocate memory");
+        }
+
+        // Read file data
+        size_t readCount = fread(fileData, sizeof(uint8_t), fileSize, file);
+        if (readCount != fileSize)
+        {
+            free(fileData);
+            fclose(file);
+            throw std::runtime_error("[FileIO] Cannot read file content");
+        }
+
+        // Cleanuo
+        fclose(file);
+
+        return FileData(fileData, fileSize);
+    }
+
+    FixedLength::FLCompressed loadCompressedFL(const char *path)
+    {
+        // TODO:
+    }
+
+    RunLength::RLCompressed loadCompressedRL(const char *path)
+    {
+        // Open file
+        FILE *file = fopen(path, "rb");
+        if (file == nullptr)
+        {
+            throw std::runtime_error("[FileIO] Cannot open file");
+        }
+
+        // Read arrays size
+        size_t size;
+        size_t readCount = fread(&size, sizeof(size_t), 1, file);
+        if (readCount != 1)
+        {
+            fclose(file);
+            throw std::runtime_error("[FileIO] Cannot read file content");
+        }
+
+        if (size == 0)
+        {
+            fclose(file);
+            return RunLength::RLCompressed{
+                .outputValues = nullptr,
+                .outputCounts = nullptr,
+                .count = 0};
+        }
+
+        // Read counts array
+        uint8_t *counts = reinterpret_cast<uint8_t *>(malloc(sizeof(uint8_t) * size));
+        if (counts == nullptr)
+        {
+            fclose(file);
+            throw std::runtime_error("[FileIO] Cannot allocate memory");
+        }
+        readCount = fread(counts, sizeof(uint8_t), size, file);
+        if (readCount != size)
+        {
+            fclose(file);
+            free(counts);
+            throw std::runtime_error("[FileIO] Cannot read file content");
+        }
+
+        // Read values array
+        uint8_t *values = reinterpret_cast<uint8_t *>(malloc(sizeof(uint8_t) * size));
+        if (values == nullptr)
+        {
+            fclose(file);
+            throw std::runtime_error("[FileIO] Cannot allocate memory");
+        }
+        readCount = fread(values, sizeof(uint8_t), size, file);
+        if (readCount != size)
+        {
+            fclose(file);
+            free(counts);
+            free(values);
+            throw std::runtime_error("[FileIO] Cannot read file content");
+        }
+
+        // Cleanup
+        fclose(file);
+
+        return RunLength::RLCompressed{
+            .outputValues = values,
+            .outputCounts = counts,
+            .count = size};
+    }
+
+    void saveFile(const char *path, FileData fileData)
+    {
+        // Open file
+        FILE *file = fopen(path, "wb");
+        if (file == nullptr)
+        {
+            throw std::runtime_error("[FileIO] Cannot open file");
+        }
+
+        // Save content to file
+        size_t writeCount = fwrite(fileData.data, sizeof(uint8_t), fileData.size, file);
+        if (writeCount != fileData.size)
+        {
+            fclose(file);
+            throw std::runtime_error("[FileIO] Cannot write to file");
+        }
+
+        // Cleanup
+        fclose(file);
+    }
+
+    void saveCompressedFL(const char *path, FixedLength::FLCompressed flCompressed)
+    {
+        // TODO:
+    }
+
+    void saveCompressedRL(const char *path, RunLength::RLCompressed rlCompressed)
+    {
+        // Open file
+        FILE *file = fopen(path, "wb");
+        if (file == nullptr)
+        {
+            throw std::runtime_error("[FileIO] Cannot open file");
+        }
+
+        // Save count
+        size_t writeCount = fwrite(&rlCompressed.count, sizeof(size_t), 1, file);
+        if (writeCount != 1)
+        {
+            fclose(file);
+            throw std::runtime_error("[FileIO] Cannot write to file");
+        }
+
+        // Save counts array
+        writeCount = fwrite(rlCompressed.outputCounts, sizeof(uint8_t), rlCompressed.count, file);
+        if (writeCount != rlCompressed.count)
+        {
+            fclose(file);
+            throw std::runtime_error("[FileIO] Cannot write to file");
+        }
+
+        // Save values array
+        writeCount = fwrite(rlCompressed.outputValues, sizeof(uint8_t), rlCompressed.count, file);
+        if (writeCount != rlCompressed.count)
+        {
+            fclose(file);
+            throw std::runtime_error("[FileIO] Cannot write to file");
+        }
+
+        // Cleanup
+        fclose(file);
+    }
+
+} // FileIO
