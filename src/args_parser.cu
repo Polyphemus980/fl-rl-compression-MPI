@@ -31,9 +31,17 @@ namespace ArgsParser
         {
             m = Method::FixedLength;
         }
+        else if (strcmp(argv[2], "fl-cpu") == 0)
+        {
+            m = Method::FixedLengthCPU;
+        }
         else if (strcmp(argv[2], "rl") == 0)
         {
             m = Method::RunLength;
+        }
+        else if (strcmp(argv[2], "rl-cpu") == 0)
+        {
+            m = Method::RunLengthCPU;
         }
         else
         {
@@ -49,9 +57,9 @@ namespace ArgsParser
 
     void usage(const char *s)
     {
-        fprintf(stderr, "USAGE: %s operation method input_file output_file\n");
+        fprintf(stderr, "USAGE: %s operation method input_file output_file\n", s);
         fprintf(stderr, "operation - c (compress) or d (decompress)\n");
-        fprintf(stderr, "method - fl (fixed-length) or rl (run-length)\n");
+        fprintf(stderr, "method - fl (fixed-length), fl-cpu (fixed-length using cpu), rl (run-length), rl-cpu (run-length using cpu)\n");
         std::exit(1);
     }
 } // ArgsParser

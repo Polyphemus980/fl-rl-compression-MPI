@@ -12,6 +12,7 @@ namespace FileIO
         uint8_t *data;
         size_t size;
 
+        FileData();
         FileData(uint8_t *data, size_t size);
         FileData(FixedLength::FLDecompressed flDecompressed);
         FileData(RunLength::RLDecompressed rlDecompressed);

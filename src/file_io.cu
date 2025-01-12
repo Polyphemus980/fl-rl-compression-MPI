@@ -6,6 +6,12 @@
 
 namespace FileIO
 {
+    FileData::FileData()
+    {
+        data = nullptr;
+        size = 0;
+    }
+
     FileData::FileData(uint8_t *data, size_t size)
     {
         this->data = data;

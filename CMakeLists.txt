@@ -7,8 +7,9 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 project(FlRlCompression LANGUAGES CXX CUDA)
 
-add_executable(FlRlCompression src/main.cu src/rl/rl_cpu.cu src/rl/rl_gpu.cu src/timers/cpu_timer.cu src/timers/gpu_timer.cu src/args_parser.cu src/fl/fl_cpu.cu src/fl/fl_gpu.cu src/file_io.cu)
+add_executable(compress src/main.cu src/rl/rl_cpu.cu src/rl/rl_gpu.cu src/timers/cpu_timer.cu src/timers/gpu_timer.cu src/args_parser.cu src/fl/fl_cpu.cu src/fl/fl_gpu.cu src/file_io.cu)
 
+# Tests
 enable_testing()
 
 # RL_CPU_TESTS

@@ -12,7 +12,9 @@ namespace ArgsParser
     enum class Method
     {
         RunLength,
+        RunLengthCPU,
         FixedLength,
+        FixedLengthCPU,
     };
 
     struct Args
