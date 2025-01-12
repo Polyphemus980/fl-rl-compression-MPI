@@ -7,6 +7,7 @@
 #include "./rl/rl_gpu.cuh"
 #include "./fl/fl_cpu.cuh"
 #include "./fl/fl_gpu.cuh"
+#include "file_io.cuh"
 
 int main(int argc, char **argv)
 {
@@ -125,38 +126,38 @@ int main(int argc, char **argv)
     // auto result2 = FixedLength::gpuCompress(data2, size2);
     // printf("\n\n");
 
-    constexpr size_t size = 10000;
-    uint8_t data[size];
+    // constexpr size_t size = 1000000;
+    // uint8_t data[size];
 
-    for (size_t i = 0; i < size; i++)
-    {
-        data[i] = rand() % 256;
-    }
-
-    auto result = FixedLength::gpuCompress(data, size);
-    printf("result size: %lu\n", result.valuesSize);
-
-    // for (size_t i = 0; i < result.valuesSize; i++)
+    // for (size_t i = 0; i < size; i++)
     // {
-    //     printf("%b\n", result.outputValues[i]);
+    //     data[i] = rand() % 256;
     // }
 
-    auto decompressed = FixedLength::gpuDecompress(result.inputSize, result.outputBits, result.bitsSize, result.outputValues, result.valuesSize);
+    // auto result = FixedLength::gpuCompress(data, size);
+    // printf("result size: %lu\n", result.valuesSize);
 
-    if (size != decompressed.size)
-    {
-        printf("XD\n");
-    }
+    // // for (size_t i = 0; i < result.valuesSize; i++)
+    // // {
+    // //     printf("%b\n", result.outputValues[i]);
+    // // }
 
-    for (size_t i = 0; i < size; i++)
-    {
-        if (data[i] != decompressed.data[i])
-        {
-            printf("wrong at %d\n", i);
-        }
-    }
+    // auto decompressed = FixedLength::gpuDecompress(result.inputSize, result.outputBits, result.bitsSize, result.outputValues, result.valuesSize);
 
-    printf("actually ok\n");
+    // if (size != decompressed.size)
+    // {
+    //     printf("XD\n");
+    // }
+
+    // for (size_t i = 0; i < size; i++)
+    // {
+    //     if (data[i] != decompressed.data[i])
+    //     {
+    //         printf("wrong at %d\n", i);
+    //     }
+    // }
+
+    // printf("actually ok\n");
 
     // size_t bitsCount = 1;
     // size_t valuesCount = 3;
@@ -171,6 +172,20 @@ int main(int argc, char **argv)
     // {
     //     printf("value: %hhu\n", result.data[i]);
     // }
+
+    // auto loadedFile = FileIO::loadFile("input/Lena-original-gray.png");
+    // auto compressed = FixedLength::gpuCompress(loadedFile.data, loadedFile.size);
+
+    // FileIO::saveCompressedFL("compressed-lena-fl.comp", compressed);
+
+    auto loadedFLCompressed = FileIO::loadCompressedFL("compressed-lena-fl.comp");
+    auto decompressed = FixedLength::gpuDecompress(loadedFLCompressed.inputSize, loadedFLCompressed.outputBits, loadedFLCompressed.bitsSize, loadedFLCompressed.outputValues, loadedFLCompressed.valuesSize);
+    FileIO::saveFile("lena-after-compression-fl.png", decompressed);
+
+    // free(loadedFile.data);
+    // free(compressed.outputValues);
+    // free(compressed.outputCounts);
+    // free(decompreseed.data);
 
     return 0;
 }

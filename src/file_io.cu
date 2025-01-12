@@ -63,7 +63,77 @@ namespace FileIO
 
     FixedLength::FLCompressed loadCompressedFL(const char *path)
     {
-        // TODO:
+        // Open file
+        FILE *file = fopen(path, "rb");
+        if (file == nullptr)
+        {
+            throw std::runtime_error("[FileIO] Cannot open file");
+        }
+
+        // Read input size
+        size_t inputSize;
+        size_t readCount = fread(&inputSize, sizeof(size_t), 1, file);
+        if (readCount != 1)
+        {
+            fclose(file);
+            throw std::runtime_error("[FileIO] Cannot read file content");
+        }
+
+        // Read bits size
+        size_t bitsSize;
+        readCount = fread(&bitsSize, sizeof(size_t), 1, file);
+        if (readCount != 1)
+        {
+            fclose(file);
+            throw std::runtime_error("[FileIO] Cannot read file content");
+        }
+
+        // Read values size
+        size_t valuesSize;
+        readCount = fread(&valuesSize, sizeof(size_t), 1, file);
+        if (readCount != 1)
+        {
+            fclose(file);
+            throw std::runtime_error("[FileIO] Cannot read file content");
+        }
+
+        // Read bits array
+        uint8_t *bits = reinterpret_cast<uint8_t *>(malloc(sizeof(uint8_t) * bitsSize));
+        if (bits == nullptr)
+        {
+            fclose(file);
+            throw std::runtime_error("Cannot allocate memory");
+        }
+        readCount = fread(bits, sizeof(uint8_t), bitsSize, file);
+        if (readCount != bitsSize)
+        {
+            fclose(file);
+            free(bits);
+            throw std::runtime_error("[FileIO] Cannot read file content");
+        }
+
+        // Read values array
+        uint8_t *values = reinterpret_cast<uint8_t *>(malloc(sizeof(uint8_t) * valuesSize));
+        if (values == nullptr)
+        {
+            fclose(file);
+            throw std::runtime_error("Cannot allocate memory");
+        }
+        readCount = fread(values, sizeof(uint8_t), valuesSize, file);
+        if (readCount != valuesSize)
+        {
+            fclose(file);
+            free(bits);
+            free(values);
+            throw std::runtime_error("[FileIO] Cannot read file content");
+        }
+
+        return FixedLength::FLCompressed{
+            .outputBits = bits,
+            .bitsSize = bitsSize,
+            .outputValues = values,
+            .valuesSize = valuesSize,
+            .inputSize = inputSize};
     }
 
     RunLength::RLCompressed loadCompressedRL(const char *path)
@@ -156,7 +226,55 @@ namespace FileIO
 
     void saveCompressedFL(const char *path, FixedLength::FLCompressed flCompressed)
     {
-        // TODO:
+        // Open file
+        FILE *file = fopen(path, "wb");
+        if (file == nullptr)
+        {
+            throw std::runtime_error("[FileIO] Cannot open file");
+        }
+
+        // Save input size
+        size_t writeCount = fwrite(&flCompressed.inputSize, sizeof(size_t), 1, file);
+        if (writeCount != 1)
+        {
+            fclose(file);
+            throw std::runtime_error("[FileIO] Cannot write to file");
+        }
+
+        // Save bits size
+        writeCount = fwrite(&flCompressed.bitsSize, sizeof(size_t), 1, file);
+        if (writeCount != 1)
+        {
+            fclose(file);
+            throw std::runtime_error("[FileIO] Cannot write to file");
+        }
+
+        // Save values size
+        writeCount = fwrite(&flCompressed.valuesSize, sizeof(size_t), 1, file);
+        if (writeCount != 1)
+        {
+            fclose(file);
+            throw std::runtime_error("[FileIO] Cannot write to file");
+        }
+
+        // Save bits array
+        writeCount = fwrite(flCompressed.outputBits, sizeof(uint8_t), flCompressed.bitsSize, file);
+        if (writeCount != flCompressed.bitsSize)
+        {
+            fclose(file);
+            throw std::runtime_error("[FileIO] Cannot write to file");
+        }
+
+        // Save values array
+        writeCount = fwrite(flCompressed.outputValues, sizeof(uint8_t), flCompressed.valuesSize, file);
+        if (writeCount != flCompressed.valuesSize)
+        {
+            fclose(file);
+            throw std::runtime_error("[FileIO] Cannot write to file");
+        }
+
+        // Cleanup
+        fclose(file);
     }
 
     void saveCompressedRL(const char *path, RunLength::RLCompressed rlCompressed)
