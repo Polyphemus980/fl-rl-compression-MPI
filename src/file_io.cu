@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <stdexcept>
 
+#include "./timers/cpu_timer.cuh"
 #include "file_io.cuh"
 
 namespace FileIO
@@ -32,6 +33,10 @@ namespace FileIO
 
     FileData loadFile(const char *path)
     {
+        Timers::CpuTimer cpuTimer;
+
+        cpuTimer.start();
+
         // Open file
         FILE *file = fopen(path, "rb");
         if (file == nullptr)
@@ -64,11 +69,18 @@ namespace FileIO
         // Cleanuo
         fclose(file);
 
+        cpuTimer.end();
+        cpuTimer.printResult("Load data from file");
+
         return FileData(fileData, fileSize);
     }
 
     FixedLength::FLCompressed loadCompressedFL(const char *path)
     {
+        Timers::CpuTimer cpuTimer;
+
+        cpuTimer.start();
+
         // Open file
         FILE *file = fopen(path, "rb");
         if (file == nullptr)
@@ -134,6 +146,9 @@ namespace FileIO
             throw std::runtime_error("[FileIO] Cannot read file content");
         }
 
+        cpuTimer.end();
+        cpuTimer.printResult("Load data from file");
+
         return FixedLength::FLCompressed{
             .outputBits = bits,
             .bitsSize = bitsSize,
@@ -144,6 +159,10 @@ namespace FileIO
 
     RunLength::RLCompressed loadCompressedRL(const char *path)
     {
+        Timers::CpuTimer cpuTimer;
+
+        cpuTimer.start();
+
         // Open file
         FILE *file = fopen(path, "rb");
         if (file == nullptr)
@@ -203,6 +222,9 @@ namespace FileIO
         // Cleanup
         fclose(file);
 
+        cpuTimer.end();
+        cpuTimer.printResult("Load data from file");
+
         return RunLength::RLCompressed{
             .outputValues = values,
             .outputCounts = counts,
@@ -211,6 +233,10 @@ namespace FileIO
 
     void saveFile(const char *path, FileData fileData)
     {
+        Timers::CpuTimer cpuTimer;
+
+        cpuTimer.start();
+
         // Open file
         FILE *file = fopen(path, "wb");
         if (file == nullptr)
@@ -228,10 +254,17 @@ namespace FileIO
 
         // Cleanup
         fclose(file);
+
+        cpuTimer.end();
+        cpuTimer.printResult("Save data to file");
     }
 
     void saveCompressedFL(const char *path, FixedLength::FLCompressed flCompressed)
     {
+        Timers::CpuTimer cpuTimer;
+
+        cpuTimer.start();
+
         // Open file
         FILE *file = fopen(path, "wb");
         if (file == nullptr)
@@ -281,10 +314,17 @@ namespace FileIO
 
         // Cleanup
         fclose(file);
+
+        cpuTimer.end();
+        cpuTimer.printResult("Save data to file");
     }
 
     void saveCompressedRL(const char *path, RunLength::RLCompressed rlCompressed)
     {
+        Timers::CpuTimer cpuTimer;
+
+        cpuTimer.start();
+
         // Open file
         FILE *file = fopen(path, "wb");
         if (file == nullptr)
@@ -318,6 +358,9 @@ namespace FileIO
 
         // Cleanup
         fclose(file);
+
+        cpuTimer.end();
+        cpuTimer.printResult("Save data to file");
     }
 
 } // FileIO
