@@ -9,11 +9,7 @@ namespace RunLength
     {
         if (size == 0)
         {
-            return RLCompressed{
-                .outputValues = nullptr,
-                .outputCounts = nullptr,
-                .count = 0,
-            };
+            return RLCompressed();
         }
 
         Timers::CpuTimer cpuTimer;
@@ -80,19 +76,14 @@ namespace RunLength
         cpuTimer.end();
         cpuTimer.printResult("Reallocate arrays on CPU");
 
-        return RLCompressed{
-            .outputValues = outputValues,
-            .outputCounts = outputCounts,
-            .count = count};
+        return RLCompressed(outputValues, outputCounts, count);
     }
 
     RLDecompressed cpuDecompress(uint8_t *values, uint8_t *counts, size_t size)
     {
         if (size == 0)
         {
-            return RLDecompressed{
-                .data = nullptr,
-                .size = 0};
+            return RLDecompressed();
         }
 
         Timers::CpuTimer cpuTimer;
@@ -125,8 +116,6 @@ namespace RunLength
         cpuTimer.end();
         cpuTimer.printResult("Decompression");
 
-        return RLDecompressed{
-            .data = data,
-            .size = outputSize};
+        return RLDecompressed(data, outputSize);
     }
 } // RunLength

@@ -15,12 +15,41 @@ namespace FixedLength
         uint8_t *outputValues;
         size_t valuesSize;
         size_t inputSize;
+
+        FLCompressed()
+        {
+            this->outputBits = nullptr;
+            this->bitsSize = 0;
+            this->outputValues = nullptr;
+            this->valuesSize = 0;
+            this->inputSize = 0;
+        };
+        FLCompressed(uint8_t *outputBits, size_t bitsSize, uint8_t *outputValues, size_t valuesSize, size_t inputSize)
+        {
+            this->outputBits = outputBits;
+            this->bitsSize = bitsSize;
+            this->outputValues = outputValues;
+            this->valuesSize = valuesSize;
+            this->inputSize = inputSize;
+        }
     };
 
     struct FLDecompressed
     {
         uint8_t *data;
         size_t size;
+
+        FLDecompressed()
+        {
+            this->data = nullptr;
+            this->size = 0;
+        };
+
+        FLDecompressed(uint8_t *data, size_t size)
+        {
+            this->data = data;
+            this->size = size;
+        };
     };
 
     inline __device__ __host__ uint8_t countLeadingZeroes(uint8_t value)

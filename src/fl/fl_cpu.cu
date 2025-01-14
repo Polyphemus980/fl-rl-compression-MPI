@@ -10,12 +10,7 @@ namespace FixedLength
     {
         if (size == 0)
         {
-            return FLCompressed{
-                .outputBits = nullptr,
-                .bitsSize = 0,
-                .outputValues = nullptr,
-                .valuesSize = 0,
-                .inputSize = 0};
+            return FLCompressed();
         }
 
         Timers::CpuTimer cpuTimer;
@@ -91,21 +86,14 @@ namespace FixedLength
         cpuTimer.end();
         cpuTimer.printResult("Compression");
 
-        return FLCompressed{
-            .outputBits = outputBits,
-            .bitsSize = framesCount,
-            .outputValues = outputValues,
-            .valuesSize = valuesSize,
-            .inputSize = size};
+        return FLCompressed(outputBits, framesCount, outputValues, valuesSize, size);
     }
 
     FLDecompressed cpuDecompress(size_t outputSize, uint8_t *bits, size_t bitsSize, uint8_t *values, size_t valuesSize)
     {
         if (valuesSize == 0 || bitsSize == 0)
         {
-            return FLDecompressed{
-                .data = nullptr,
-                .size = 0};
+            return FLDecompressed();
         }
 
         Timers::CpuTimer cpuTimer;
@@ -155,8 +143,6 @@ namespace FixedLength
         cpuTimer.end();
         cpuTimer.printResult("Decompression");
 
-        return FLDecompressed{
-            .data = data,
-            .size = outputSize};
+        return FLDecompressed(data, outputSize);
     }
 } // FixedLength

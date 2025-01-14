@@ -149,12 +149,7 @@ namespace FileIO
         cpuTimer.end();
         cpuTimer.printResult("Load data from file");
 
-        return FixedLength::FLCompressed{
-            .outputBits = bits,
-            .bitsSize = bitsSize,
-            .outputValues = values,
-            .valuesSize = valuesSize,
-            .inputSize = inputSize};
+        return FixedLength::FLCompressed(bits, bitsSize, values, valuesSize, inputSize);
     }
 
     RunLength::RLCompressed loadCompressedRL(const char *path)
@@ -182,10 +177,7 @@ namespace FileIO
         if (size == 0)
         {
             fclose(file);
-            return RunLength::RLCompressed{
-                .outputValues = nullptr,
-                .outputCounts = nullptr,
-                .count = 0};
+            return RunLength::RLCompressed();
         }
 
         // Read counts array
@@ -225,10 +217,7 @@ namespace FileIO
         cpuTimer.end();
         cpuTimer.printResult("Load data from file");
 
-        return RunLength::RLCompressed{
-            .outputValues = values,
-            .outputCounts = counts,
-            .count = size};
+        return RunLength::RLCompressed(values, counts, size);
     }
 
     void saveFile(const char *path, FileData fileData)

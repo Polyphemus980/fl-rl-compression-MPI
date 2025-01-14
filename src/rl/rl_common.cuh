@@ -13,12 +13,38 @@ namespace RunLength
         // two sequences next to each other.
         uint8_t *outputCounts;
         size_t count;
+
+        RLCompressed()
+        {
+            outputValues = nullptr;
+            outputCounts = nullptr;
+            count = 0;
+        };
+
+        RLCompressed(uint8_t *outputValues, uint8_t *outputCounts, size_t count)
+        {
+            this->outputValues = outputValues;
+            this->outputCounts = outputCounts;
+            this->count = count;
+        };
     };
 
     struct RLDecompressed
     {
         uint8_t *data;
         size_t size;
+
+        RLDecompressed()
+        {
+            this->data = nullptr;
+            this->size = 0;
+        };
+
+        RLDecompressed(uint8_t *data, size_t size)
+        {
+            this->data = data;
+            this->size = size;
+        };
     };
 } // RunLength
 

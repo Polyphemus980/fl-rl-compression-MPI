@@ -1,6 +1,7 @@
 #include <thrust/execution_policy.h>
 #include <thrust/functional.h>
 #include <thrust/scan.h>
+#include <stdexcept>
 
 #include "rl_gpu.cuh"
 #include "../utils.cuh"
@@ -15,160 +16,176 @@ namespace RunLength
     {
         if (size == 0)
         {
-            return RLCompressed{
-                .outputValues = nullptr,
-                .outputCounts = nullptr,
-                .count = 0};
+            return RLCompressed();
         }
+
+        std::exception error;
+        bool isError = false;
 
         Timers::CpuTimer cpuTimer;
         Timers::GpuTimer gpuTimer;
 
-        gpuTimer.start();
-
-        // Copy input data to GPU
-        uint8_t *d_data;
-        CHECK_CUDA(cudaMalloc(&d_data, sizeof(uint8_t) * size));
-        CHECK_CUDA(cudaMemcpy(d_data, data, sizeof(uint8_t) * size, cudaMemcpyHostToDevice));
-
-        gpuTimer.end();
-        gpuTimer.printResult("Copy input data to GPU");
-
-        gpuTimer.start();
-
-        // Prepare GPU arrays
-        uint32_t *d_startMask;
-        CHECK_CUDA(cudaMalloc(&d_startMask, sizeof(uint32_t) * size));
-        CHECK_CUDA(cudaMemset(d_startMask, 0, sizeof(uint32_t) * size));
-        uint32_t *d_scannedStartMask;
-        CHECK_CUDA(cudaMalloc(&d_scannedStartMask, sizeof(uint32_t) * size));
-        uint32_t *d_startIndices;
-        CHECK_CUDA(cudaMalloc(&d_startIndices, sizeof(uint32_t) * size));
-        uint32_t *d_startIndicesLength;
-        CHECK_CUDA(cudaMalloc(&d_startIndicesLength, sizeof(uint32_t)));
-        // We could do it only after we know how much exactly we need, but it doesn't really matter
-        // as we will copy back exact amount back to cpu anyway.
-        // This way error handling is easier as all allocations are done at the beggining of the function.
-        uint8_t *d_outputValues;
-        CHECK_CUDA(cudaMalloc(&d_outputValues, sizeof(uint8_t) * size));
-        uint8_t *d_outputCounts;
-        CHECK_CUDA(cudaMalloc(&d_outputCounts, sizeof(uint8_t) * size));
-        // Same here, we could wait and allocate it later with exact size, but this way it's easier
-        // to handle errors.
-        uint32_t *d_recalculateSequence;
-        CHECK_CUDA(cudaMalloc(&d_recalculateSequence, sizeof(uint32_t) * size));
-        uint32_t *d_shouldRecalculate;
-        CHECK_CUDA(cudaMalloc(&d_shouldRecalculate, sizeof(uint32_t)));
-        CHECK_CUDA(cudaMemset(d_shouldRecalculate, 0, sizeof(uint32_t)));
-
-        gpuTimer.end();
-        gpuTimer.printResult("Allocate arrays on GPU");
-
-        gpuTimer.start();
-
-        // Calculate start mask
-        const uint32_t calculateStartMaskThreadsCount = 1024;
-        const uint32_t calculateStartMaskBlocksCount = ceil(size * 1.0 / calculateStartMaskThreadsCount);
-        compressCalculateStartMask<<<calculateStartMaskBlocksCount, calculateStartMaskThreadsCount>>>(d_data, size, d_startMask);
-        CHECK_CUDA(cudaDeviceSynchronize());
-        CHECK_CUDA(cudaGetLastError());
-
-        // Calculate scanned start mask
-        compressCalculateScannedStartMask(d_startMask, d_scannedStartMask, size);
-
-        // Calculate start indicies
-        const uint32_t calculateStartIndiciesThreadsCount = 1024;
-        const uint32_t calculateStartIndiciesBlocksCount = ceil(size * 1.0 / calculateStartIndiciesThreadsCount);
-        compressCalculateStartIndicies<<<calculateStartIndiciesBlocksCount, calculateStartIndiciesThreadsCount>>>(d_scannedStartMask, size, d_startIndices, d_startIndicesLength);
-        CHECK_CUDA(cudaDeviceSynchronize());
-        CHECK_CUDA(cudaGetLastError());
-
-        // First copy to CPU size of final output to know how much bytes to copy (and allocate)
-        // and to know how big kernel should be
         uint32_t outputSize = 0;
-        CHECK_CUDA(cudaMemcpy(&outputSize, d_startIndicesLength, sizeof(uint32_t), cudaMemcpyDeviceToHost));
 
-        // Check if we need to recalculate some sequence due to size > 255
-        const uint32_t checkForMoreSequencesThreadsCount = 1024;
-        const uint32_t checkForMoreSequencesBlocksCount = ceil(outputSize * 1.0 / checkForMoreSequencesThreadsCount);
-        compressCheckForMoreSequences<<<checkForMoreSequencesBlocksCount, checkForMoreSequencesThreadsCount>>>(d_startIndices, d_startIndicesLength, size, d_recalculateSequence, d_shouldRecalculate);
-        CHECK_CUDA(cudaDeviceSynchronize());
-        CHECK_CUDA(cudaGetLastError());
+        // CPU arrays
+        uint8_t *outputValues = nullptr;
+        uint8_t *outputCounts = nullptr;
 
-        // Copy to cpu boolean value to check if need to recalculate some sequences
-        uint32_t shouldRecalculate = 0;
-        CHECK_CUDA(cudaMemcpy(&shouldRecalculate, d_shouldRecalculate, sizeof(uint32_t), cudaMemcpyDeviceToHost));
+        // GPU arrays
+        uint8_t *d_data = nullptr;
+        uint32_t *d_startMask = nullptr;
+        uint32_t *d_scannedStartMask = nullptr;
+        uint32_t *d_startIndices = nullptr;
+        uint32_t *d_startIndicesLength = nullptr;
+        uint8_t *d_outputValues = nullptr;
+        uint8_t *d_outputCounts = nullptr;
+        uint32_t *d_recalculateSequence = nullptr;
+        uint32_t *d_shouldRecalculate = nullptr;
 
-        if (shouldRecalculate != 0)
+        try
         {
-            // Copy data to CPU needed for threads counts of next kernel
-            uint32_t lastRecalculateSequence;
-            CHECK_CUDA(cudaMemcpy(&lastRecalculateSequence, &d_recalculateSequence[outputSize - 1], sizeof(uint32_t), cudaMemcpyDeviceToHost));
+            gpuTimer.start();
 
-            // Prescan on `recalculateSequence`
-            compressRecalculateSequencePrescan(d_recalculateSequence, outputSize);
+            // Copy input data to GPU
+            CHECK_CUDA(cudaMalloc(&d_data, sizeof(uint8_t) * size));
+            CHECK_CUDA(cudaMemcpy(d_data, data, sizeof(uint8_t) * size, cudaMemcpyHostToDevice));
 
-            // Copy data to CPU needed for threads counts of next kernel
-            uint32_t lastRecalculateSequencePrescan;
-            CHECK_CUDA(cudaMemcpy(&lastRecalculateSequencePrescan, &d_recalculateSequence[outputSize - 1], sizeof(uint32_t), cudaMemcpyDeviceToHost));
+            gpuTimer.end();
+            gpuTimer.printResult("Copy input data to GPU");
 
-            // Recalculate start mask
-            const uint32_t recalculateStartMaskAllThreads = lastRecalculateSequence + lastRecalculateSequencePrescan;
-            const uint32_t recalculateStartMaskThreadsCount = 1024;
-            const uint32_t recalculateStartMaskBlocksCount = ceil(recalculateStartMaskAllThreads * 1.0 / recalculateStartMaskThreadsCount);
-            compressRecalculateStartMask<<<recalculateStartMaskBlocksCount, recalculateStartMaskThreadsCount>>>(d_startMask, recalculateStartMaskAllThreads, d_recalculateSequence, outputSize, d_startIndices);
+            gpuTimer.start();
+
+            // Prepare GPU arrays
+            CHECK_CUDA(cudaMalloc(&d_startMask, sizeof(uint32_t) * size));
+            CHECK_CUDA(cudaMemset(d_startMask, 0, sizeof(uint32_t) * size));
+            CHECK_CUDA(cudaMalloc(&d_scannedStartMask, sizeof(uint32_t) * size));
+            CHECK_CUDA(cudaMalloc(&d_startIndices, sizeof(uint32_t) * size));
+            CHECK_CUDA(cudaMalloc(&d_startIndicesLength, sizeof(uint32_t)));
+            // We could do it only after we know how much exactly we need, but it doesn't really matter
+            // as we will copy back exact amount back to cpu anyway.
+            // This way error handling is easier as all allocations are done at the beggining of the function.
+            CHECK_CUDA(cudaMalloc(&d_outputValues, sizeof(uint8_t) * size));
+            CHECK_CUDA(cudaMalloc(&d_outputCounts, sizeof(uint8_t) * size));
+            // Same here, we could wait and allocate it later with exact size, but this way it's easier
+            // to handle errors.
+            CHECK_CUDA(cudaMalloc(&d_recalculateSequence, sizeof(uint32_t) * size));
+            CHECK_CUDA(cudaMalloc(&d_shouldRecalculate, sizeof(uint32_t)));
+            CHECK_CUDA(cudaMemset(d_shouldRecalculate, 0, sizeof(uint32_t)));
+
+            gpuTimer.end();
+            gpuTimer.printResult("Allocate arrays on GPU");
+
+            gpuTimer.start();
+
+            // Calculate start mask
+            const uint32_t calculateStartMaskThreadsCount = 1024;
+            const uint32_t calculateStartMaskBlocksCount = ceil(size * 1.0 / calculateStartMaskThreadsCount);
+            compressCalculateStartMask<<<calculateStartMaskBlocksCount, calculateStartMaskThreadsCount>>>(d_data, size, d_startMask);
             CHECK_CUDA(cudaDeviceSynchronize());
             CHECK_CUDA(cudaGetLastError());
 
-            // Do points 2. and 3. again
             // Calculate scanned start mask
             compressCalculateScannedStartMask(d_startMask, d_scannedStartMask, size);
 
             // Calculate start indicies
+            const uint32_t calculateStartIndiciesThreadsCount = 1024;
+            const uint32_t calculateStartIndiciesBlocksCount = ceil(size * 1.0 / calculateStartIndiciesThreadsCount);
             compressCalculateStartIndicies<<<calculateStartIndiciesBlocksCount, calculateStartIndiciesThreadsCount>>>(d_scannedStartMask, size, d_startIndices, d_startIndicesLength);
             CHECK_CUDA(cudaDeviceSynchronize());
             CHECK_CUDA(cudaGetLastError());
 
-            // Copy to CPU final outputSize
-            outputSize = 0;
+            // First copy to CPU size of final output to know how much bytes to copy (and allocate)
+            // and to know how big kernel should be
+
             CHECK_CUDA(cudaMemcpy(&outputSize, d_startIndicesLength, sizeof(uint32_t), cudaMemcpyDeviceToHost));
+
+            // Check if we need to recalculate some sequence due to size > 255
+            const uint32_t checkForMoreSequencesThreadsCount = 1024;
+            const uint32_t checkForMoreSequencesBlocksCount = ceil(outputSize * 1.0 / checkForMoreSequencesThreadsCount);
+            compressCheckForMoreSequences<<<checkForMoreSequencesBlocksCount, checkForMoreSequencesThreadsCount>>>(d_startIndices, d_startIndicesLength, size, d_recalculateSequence, d_shouldRecalculate);
+            CHECK_CUDA(cudaDeviceSynchronize());
+            CHECK_CUDA(cudaGetLastError());
+
+            // Copy to cpu boolean value to check if need to recalculate some sequences
+            uint32_t shouldRecalculate = 0;
+            CHECK_CUDA(cudaMemcpy(&shouldRecalculate, d_shouldRecalculate, sizeof(uint32_t), cudaMemcpyDeviceToHost));
+
+            if (shouldRecalculate != 0)
+            {
+                // Copy data to CPU needed for threads counts of next kernel
+                uint32_t lastRecalculateSequence;
+                CHECK_CUDA(cudaMemcpy(&lastRecalculateSequence, &d_recalculateSequence[outputSize - 1], sizeof(uint32_t), cudaMemcpyDeviceToHost));
+
+                // Prescan on `recalculateSequence`
+                compressRecalculateSequencePrescan(d_recalculateSequence, outputSize);
+
+                // Copy data to CPU needed for threads counts of next kernel
+                uint32_t lastRecalculateSequencePrescan;
+                CHECK_CUDA(cudaMemcpy(&lastRecalculateSequencePrescan, &d_recalculateSequence[outputSize - 1], sizeof(uint32_t), cudaMemcpyDeviceToHost));
+
+                // Recalculate start mask
+                const uint32_t recalculateStartMaskAllThreads = lastRecalculateSequence + lastRecalculateSequencePrescan;
+                const uint32_t recalculateStartMaskThreadsCount = 1024;
+                const uint32_t recalculateStartMaskBlocksCount = ceil(recalculateStartMaskAllThreads * 1.0 / recalculateStartMaskThreadsCount);
+                compressRecalculateStartMask<<<recalculateStartMaskBlocksCount, recalculateStartMaskThreadsCount>>>(d_startMask, recalculateStartMaskAllThreads, d_recalculateSequence, outputSize, d_startIndices);
+                CHECK_CUDA(cudaDeviceSynchronize());
+                CHECK_CUDA(cudaGetLastError());
+
+                // Do points 2. and 3. again
+                // Calculate scanned start mask
+                compressCalculateScannedStartMask(d_startMask, d_scannedStartMask, size);
+
+                // Calculate start indicies
+                compressCalculateStartIndicies<<<calculateStartIndiciesBlocksCount, calculateStartIndiciesThreadsCount>>>(d_scannedStartMask, size, d_startIndices, d_startIndicesLength);
+                CHECK_CUDA(cudaDeviceSynchronize());
+                CHECK_CUDA(cudaGetLastError());
+
+                // Copy to CPU final outputSize
+                outputSize = 0;
+                CHECK_CUDA(cudaMemcpy(&outputSize, d_startIndicesLength, sizeof(uint32_t), cudaMemcpyDeviceToHost));
+            }
+
+            // Calculate final output
+            const uint32_t calculateOutputThreadsCount = 1024;
+            const uint32_t calculateOutputBlocksCount = ceil(outputSize * 1.0 / calculateOutputThreadsCount);
+            compressCalculateOutput<<<calculateOutputBlocksCount, calculateOutputThreadsCount>>>(d_data, size, d_startIndices, d_startIndicesLength, d_outputValues, d_outputCounts);
+            CHECK_CUDA(cudaDeviceSynchronize());
+            CHECK_CUDA(cudaGetLastError());
+
+            gpuTimer.end();
+            gpuTimer.printResult("Compress data");
+
+            cpuTimer.start();
+
+            // Allocate needed cpu arrays
+            outputValues = reinterpret_cast<uint8_t *>(malloc(sizeof(uint8_t) * outputSize));
+            if (outputValues == nullptr)
+            {
+                throw std::runtime_error("Cannot allocate memory");
+            }
+            outputCounts = reinterpret_cast<uint8_t *>(malloc(sizeof(uint8_t) * outputSize));
+            if (outputCounts == nullptr)
+            {
+                throw std::runtime_error("Cannot allocate memory");
+            }
+
+            cpuTimer.end();
+            cpuTimer.printResult("Allocate arrays on CPU");
+
+            gpuTimer.start();
+
+            // Copy results to CPU
+            CHECK_CUDA(cudaMemcpy(outputValues, d_outputValues, sizeof(uint8_t) * outputSize, cudaMemcpyDeviceToHost));
+            CHECK_CUDA(cudaMemcpy(outputCounts, d_outputCounts, sizeof(uint8_t) * outputSize, cudaMemcpyDeviceToHost));
+
+            gpuTimer.end();
+            gpuTimer.printResult("Copy results to CPU");
         }
-
-        // Calculate final output
-        const uint32_t calculateOutputThreadsCount = 1024;
-        const uint32_t calculateOutputBlocksCount = ceil(outputSize * 1.0 / calculateOutputThreadsCount);
-        compressCalculateOutput<<<calculateOutputBlocksCount, calculateOutputThreadsCount>>>(d_data, size, d_startIndices, d_startIndicesLength, d_outputValues, d_outputCounts);
-        CHECK_CUDA(cudaDeviceSynchronize());
-        CHECK_CUDA(cudaGetLastError());
-
-        gpuTimer.end();
-        gpuTimer.printResult("Compress data");
-
-        cpuTimer.start();
-
-        // Allocate needed cpu arrays
-        uint8_t *outputValues = reinterpret_cast<uint8_t *>(malloc(sizeof(uint8_t) * outputSize));
-        if (outputValues == nullptr)
+        catch (const std::exception &e)
         {
-            throw std::runtime_error("Cannot allocate memory");
+            isError = true;
+            error = e;
         }
-        uint8_t *outputCounts = reinterpret_cast<uint8_t *>(malloc(sizeof(uint8_t) * outputSize));
-        if (outputCounts == nullptr)
-        {
-            throw std::runtime_error("Cannot allocate memory");
-        }
-
-        cpuTimer.end();
-        cpuTimer.printResult("Allocate arrays on CPU");
-
-        gpuTimer.start();
-
-        // Copy results to CPU
-        CHECK_CUDA(cudaMemcpy(outputValues, d_outputValues, sizeof(uint8_t) * outputSize, cudaMemcpyDeviceToHost));
-        CHECK_CUDA(cudaMemcpy(outputCounts, d_outputCounts, sizeof(uint8_t) * outputSize, cudaMemcpyDeviceToHost));
-
-        gpuTimer.end();
-        gpuTimer.printResult("Copy results to CPU");
 
         gpuTimer.start();
 
@@ -184,104 +201,126 @@ namespace RunLength
         gpuTimer.end();
         gpuTimer.printResult("Deallocate GPU array");
 
-        return RLCompressed{
-            .outputValues = outputValues,
-            .outputCounts = outputCounts,
-            .count = outputSize,
-        };
+        if (isError)
+        {
+            throw error;
+        }
+
+        return RLCompressed(outputValues, outputCounts, outputSize);
     }
 
     RLDecompressed gpuDecompress(uint8_t *values, uint8_t *counts, size_t size)
     {
         if (size == 0)
         {
-            return RLDecompressed{
-                .data = nullptr,
-                .size = 0};
+            return RLDecompressed();
         }
 
         Timers::CpuTimer cpuTimer;
         Timers::GpuTimer gpuTimer;
 
-        gpuTimer.start();
+        std::exception error;
+        bool isError = false;
 
-        // Copy input data to GPU
+        size_t outputSize = 0;
+
+        // CPU arrays
+        uint8_t *data;
+
+        // GPU arrays
         uint8_t *d_values;
-        CHECK_CUDA(cudaMalloc(&d_values, sizeof(uint8_t) * size));
-        CHECK_CUDA(cudaMemcpy(d_values, values, sizeof(uint8_t) * size, cudaMemcpyHostToDevice));
-
         uint8_t *d_counts;
-        CHECK_CUDA(cudaMalloc(&d_counts, sizeof(uint8_t) * size));
-        CHECK_CUDA(cudaMemcpy(d_counts, counts, sizeof(uint8_t) * size, cudaMemcpyHostToDevice));
-
-        gpuTimer.end();
-        gpuTimer.printResult("Copy input data to GPU");
-
-        gpuTimer.start();
-
-        // Prepare GPU arrays
-        uint32_t *d_startIndicies;
-        CHECK_CUDA(cudaMalloc(&d_startIndicies, sizeof(uint32_t) * size));
-
-        gpuTimer.end();
-        gpuTimer.printResult("Allocate arrays on GPU");
-
-        gpuTimer.start();
-
-        // Calculate startIndicies
-        decompressCalculateStartIndicies(d_counts, size, d_startIndicies);
-
-        // Calculate final output length
-        uint32_t startIndiciesLast;
-        CHECK_CUDA(cudaMemcpy(&startIndiciesLast, &d_startIndicies[size - 1], sizeof(uint32_t), cudaMemcpyDeviceToHost));
-        size_t outputSize = startIndiciesLast + counts[size - 1];
-
-        // Allocate GPU array for final output
         uint8_t *d_data;
-        CHECK_CUDA(cudaMalloc(&d_data, sizeof(uint8_t) * outputSize));
+        uint32_t *d_startIndicies;
 
-        // Calculate final output
-        const uint32_t calculateOutputThreadsCount = 1024;
-        const uint32_t calculateOutputBlocksCount = ceil(outputSize * 1.0 / calculateOutputThreadsCount);
-        decompressCalculateOutput<<<calculateOutputBlocksCount, calculateOutputThreadsCount>>>(d_values, size, d_startIndicies, outputSize, d_data);
-        CHECK_CUDA(cudaDeviceSynchronize());
-        CHECK_CUDA(cudaGetLastError());
-
-        gpuTimer.end();
-        gpuTimer.printResult("Decompress data");
-
-        cpuTimer.start();
-
-        // Allocate CPU array
-        uint8_t *data = reinterpret_cast<uint8_t *>(malloc(sizeof(uint8_t) * outputSize));
-        if (data == nullptr)
+        try
         {
-            throw std::runtime_error("Cannot allocate memory");
+            gpuTimer.start();
+
+            // Copy input data to GPU
+            CHECK_CUDA(cudaMalloc(&d_values, sizeof(uint8_t) * size));
+            CHECK_CUDA(cudaMemcpy(d_values, values, sizeof(uint8_t) * size, cudaMemcpyHostToDevice));
+
+            CHECK_CUDA(cudaMalloc(&d_counts, sizeof(uint8_t) * size));
+            CHECK_CUDA(cudaMemcpy(d_counts, counts, sizeof(uint8_t) * size, cudaMemcpyHostToDevice));
+
+            gpuTimer.end();
+            gpuTimer.printResult("Copy input data to GPU");
+
+            gpuTimer.start();
+
+            // Prepare GPU arrays
+            CHECK_CUDA(cudaMalloc(&d_startIndicies, sizeof(uint32_t) * size));
+
+            gpuTimer.end();
+            gpuTimer.printResult("Allocate arrays on GPU");
+
+            gpuTimer.start();
+
+            // Calculate startIndicies
+            decompressCalculateStartIndicies(d_counts, size, d_startIndicies);
+
+            // Calculate final output length
+            uint32_t startIndiciesLast;
+            CHECK_CUDA(cudaMemcpy(&startIndiciesLast, &d_startIndicies[size - 1], sizeof(uint32_t), cudaMemcpyDeviceToHost));
+            outputSize = startIndiciesLast + counts[size - 1];
+
+            // Allocate GPU array for final output
+            CHECK_CUDA(cudaMalloc(&d_data, sizeof(uint8_t) * outputSize));
+
+            // Calculate final output
+            const uint32_t calculateOutputThreadsCount = 1024;
+            const uint32_t calculateOutputBlocksCount = ceil(outputSize * 1.0 / calculateOutputThreadsCount);
+            decompressCalculateOutput<<<calculateOutputBlocksCount, calculateOutputThreadsCount>>>(d_values, size, d_startIndicies, outputSize, d_data);
+            CHECK_CUDA(cudaDeviceSynchronize());
+            CHECK_CUDA(cudaGetLastError());
+
+            gpuTimer.end();
+            gpuTimer.printResult("Decompress data");
+
+            cpuTimer.start();
+
+            // Allocate CPU array
+            data = reinterpret_cast<uint8_t *>(malloc(sizeof(uint8_t) * outputSize));
+            if (data == nullptr)
+            {
+                throw std::runtime_error("Cannot allocate memory");
+            }
+
+            cpuTimer.end();
+            cpuTimer.printResult("Allocate arrays on CPU");
+
+            gpuTimer.start();
+
+            // Copy result to CPU
+            CHECK_CUDA(cudaMemcpy(data, d_data, sizeof(uint8_t) * outputSize, cudaMemcpyDeviceToHost));
+
+            gpuTimer.end();
+            gpuTimer.printResult("Copy result to CPU");
         }
-
-        cpuTimer.end();
-        cpuTimer.printResult("Allocate arrays on CPU");
-
-        gpuTimer.start();
-
-        // Copy result to CPU
-        CHECK_CUDA(cudaMemcpy(data, d_data, sizeof(uint8_t) * outputSize, cudaMemcpyDeviceToHost));
-
-        gpuTimer.end();
-        gpuTimer.printResult("Copy result to CPU");
+        catch (const std::exception &e)
+        {
+            isError = true;
+            error = e;
+        }
 
         gpuTimer.start();
 
         // Deallocate GPU arrays
         cudaFree(d_values);
         cudaFree(d_counts);
+        cudaFree(d_data);
+        cudaFree(d_startIndicies);
 
         gpuTimer.end();
         gpuTimer.printResult("Deallocate GPU arrays");
 
-        return RLDecompressed{
-            .data = data,
-            .size = outputSize};
+        if (isError)
+        {
+            throw error;
+        }
+
+        return RLDecompressed(data, outputSize);
     }
 
     // Kernels

@@ -1,7 +1,7 @@
 #include <iostream>
 #include <cstdio>
 #include <cstdint>
-#include <chrono>
+#include <stdexcept>
 
 #include "args_parser.cuh"
 #include "file_io.cuh"
@@ -32,20 +32,37 @@ int main(int argc, char **argv)
 
 void compress(ArgsParser::Method method, const char *input, const char *output)
 {
-    auto content = FileIO::loadFile(input);
+    FileIO::FileData content;
+    try
+    {
+        content = FileIO::loadFile(input);
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << "[ERROR]: " << e.what() << '\n';
+        return;
+    }
+
     if (method == ArgsParser::Method::FixedLength || method == ArgsParser::Method::FixedLengthCPU)
     {
         // Fixed length
         FixedLength::FLCompressed compressed;
-        if (method == ArgsParser::Method::FixedLength)
+        try
         {
-            compressed = FixedLength::gpuCompress(content.data, content.size);
+            if (method == ArgsParser::Method::FixedLength)
+            {
+                compressed = FixedLength::gpuCompress(content.data, content.size);
+            }
+            else
+            {
+                compressed = FixedLength::cpuCompress(content.data, content.size);
+            }
+            FileIO::saveCompressedFL(output, compressed);
         }
-        else
+        catch (const std::exception &e)
         {
-            compressed = FixedLength::cpuCompress(content.data, content.size);
+            std::cerr << "[ERROR]: " << e.what() << '\n';
         }
-        FileIO::saveCompressedFL(output, compressed);
         free(compressed.outputValues);
         free(compressed.outputBits);
     }
@@ -53,15 +70,22 @@ void compress(ArgsParser::Method method, const char *input, const char *output)
     {
         // Run length
         RunLength::RLCompressed compressed;
-        if (method == ArgsParser::Method::RunLength)
+        try
         {
-            compressed = RunLength::gpuCompress(content.data, content.size);
+            if (method == ArgsParser::Method::RunLength)
+            {
+                compressed = RunLength::gpuCompress(content.data, content.size);
+            }
+            else
+            {
+                compressed = RunLength::cpuCompress(content.data, content.size);
+            }
+            FileIO::saveCompressedRL(output, compressed);
         }
-        else
+        catch (const std::exception &e)
         {
-            compressed = RunLength::cpuCompress(content.data, content.size);
+            std::cerr << "[ERROR]: " << e.what() << '\n';
         }
-        FileIO::saveCompressedRL(output, compressed);
         free(compressed.outputValues);
         free(compressed.outputCounts);
     }
@@ -71,19 +95,29 @@ void compress(ArgsParser::Method method, const char *input, const char *output)
 void decompress(ArgsParser::Method method, const char *input, const char *output)
 {
     FileIO::FileData fd;
+    bool canSaveFile = true;
     if (method == ArgsParser::Method::FixedLength || method == ArgsParser::Method::FixedLengthCPU)
     {
         // Fixed length
-        auto compressed = FileIO::loadCompressedFL(input);
-        if (method == ArgsParser::Method::FixedLength)
+        FixedLength::FLCompressed compressed;
+        try
         {
-            auto decompressed = FixedLength::gpuDecompress(compressed.inputSize, compressed.outputBits, compressed.bitsSize, compressed.outputValues, compressed.valuesSize);
-            fd = FileIO::FileData(decompressed);
+            compressed = FileIO::loadCompressedFL(input);
+            if (method == ArgsParser::Method::FixedLength)
+            {
+                auto decompressed = FixedLength::gpuDecompress(compressed.inputSize, compressed.outputBits, compressed.bitsSize, compressed.outputValues, compressed.valuesSize);
+                fd = FileIO::FileData(decompressed);
+            }
+            else
+            {
+                auto decompressed = FixedLength::cpuDecompress(compressed.inputSize, compressed.outputBits, compressed.bitsSize, compressed.outputValues, compressed.valuesSize);
+                fd = FileIO::FileData(decompressed);
+            }
         }
-        else
+        catch (const std::exception &e)
         {
-            auto decompressed = FixedLength::cpuDecompress(compressed.inputSize, compressed.outputBits, compressed.bitsSize, compressed.outputValues, compressed.valuesSize);
-            fd = FileIO::FileData(decompressed);
+            std::cerr << "[ERROR]: " << e.what() << '\n';
+            canSaveFile = false;
         }
         free(compressed.outputValues);
         free(compressed.outputBits);
@@ -91,20 +125,39 @@ void decompress(ArgsParser::Method method, const char *input, const char *output
     else
     {
         // Run length
-        auto compressed = FileIO::loadCompressedRL(input);
-        if (method == ArgsParser::Method::RunLength)
+        RunLength::RLCompressed compressed;
+        try
         {
-            auto decompressed = RunLength::gpuDecompress(compressed.outputValues, compressed.outputCounts, compressed.count);
-            fd = FileIO::FileData(decompressed);
+            compressed = FileIO::loadCompressedRL(input);
+            if (method == ArgsParser::Method::RunLength)
+            {
+                auto decompressed = RunLength::gpuDecompress(compressed.outputValues, compressed.outputCounts, compressed.count);
+                fd = FileIO::FileData(decompressed);
+            }
+            else
+            {
+                auto decompressed = RunLength::cpuDecompress(compressed.outputValues, compressed.outputCounts, compressed.count);
+                fd = FileIO::FileData(decompressed);
+            }
         }
-        else
+        catch (const std::exception &e)
         {
-            auto decompressed = RunLength::cpuDecompress(compressed.outputValues, compressed.outputCounts, compressed.count);
-            fd = FileIO::FileData(decompressed);
+            std::cerr << "[ERROR]: " << e.what() << '\n';
+            canSaveFile = false;
         }
         free(compressed.outputValues);
         free(compressed.outputCounts);
     }
-    FileIO::saveFile(output, fd);
+    if (canSaveFile)
+    {
+        try
+        {
+            FileIO::saveFile(output, fd);
+        }
+        catch (const std::exception &e)
+        {
+            std::cerr << "[ERROR]: " << e.what() << '\n';
+        }
+    }
     free(fd.data);
 }
