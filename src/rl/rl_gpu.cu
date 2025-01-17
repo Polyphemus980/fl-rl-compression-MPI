@@ -391,17 +391,25 @@ namespace RunLength
                 uint32_t diff = size;
                 if (diff > 255)
                 {
-                    d_recalculateSequence[0] = (diff / 255) + 1;
+                    d_recalculateSequence[0] = ((diff - 1) / 255) + 1;
                     atomicOr(s_shouldRecalculate, 1);
                 }
             }
         }
-        else if (threadId < s_startIndiciesLength[0] - 1)
+        else if (threadId <= s_startIndiciesLength[0] - 1)
         {
-            auto diff = d_startIndicies[threadId + 1] - d_startIndicies[threadId];
+            uint32_t diff = 0;
+            if (threadId < s_startIndiciesLength[0] - 1)
+            {
+                diff = d_startIndicies[threadId + 1] - d_startIndicies[threadId];
+            }
+            else
+            {
+                diff = size - d_startIndicies[threadId];
+            }
             if (diff > 255)
             {
-                d_recalculateSequence[threadId] = (diff / 255) + 1;
+                d_recalculateSequence[threadId] = ((diff - 1) / 255) + 1;
                 atomicOr(s_shouldRecalculate, 1);
             }
         }
@@ -489,23 +497,18 @@ namespace RunLength
         {
             size_t m = (left + right) / 2;
 
-            if (d_arr[m] == value)
-            {
-                return m;
-            }
             if (d_arr[m] <= value)
             {
                 if (m == size - 1 || d_arr[m + 1] > value)
                 {
                     return m;
                 }
+                else
+                {
+                    left = m + 1;
+                }
             }
-
-            if (d_arr[m] < value)
-            {
-                left = m + 1;
-            }
-            else if (d_arr[m] > value)
+            else
             {
                 right = m - 1;
             }

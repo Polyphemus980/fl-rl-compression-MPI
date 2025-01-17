@@ -303,8 +303,21 @@ void test_rl_gpu_decompression_zero_count(void)
     TEST_ARRAYS_EQUAL(expectedData, decompressedData.data, expectedSize, "%hhu");
 }
 
+void test_rl_gpu_decompression_more_zero_count(void)
+{
+    uint8_t counts[] = {0, 0, 0, 0, 2};
+    uint8_t values[] = {9, 5, 8, 3, 1};
+    size_t size = 5;
+
+    uint8_t expectedData[] = {1, 1};
+    size_t expectedSize = 2;
+
+    auto decompressedData = RunLength::gpuDecompress(values, counts, size);
+    TEST_CHECK_(decompressedData.size == expectedSize, "%zu is equal to %zu", decompressedData.size, expectedSize);
+    TEST_ARRAYS_EQUAL(expectedData, decompressedData.data, expectedSize, "%hhu");
+}
+
 // Compression + Decompression
-// TODO: add tests that do both compression and then decompression
 
 void test_rl_gpu_compression_decompression_implementation_plan_example(void)
 {
@@ -473,6 +486,7 @@ TEST_LIST = {
     {"test_rl_gpu_decompression_large_sequence", test_rl_gpu_decompression_large_sequence},
     {"test_rl_gpu_decompression_same_element_with_count_over_255", test_rl_gpu_decompression_same_element_with_count_over_255},
     {"test_rl_gpu_decompression_zero_count", test_rl_gpu_decompression_zero_count},
+    {"test_rl_gpu_decompression_more_zero_count", test_rl_gpu_decompression_more_zero_count},
     // Compression + Decompression
     {"test_rl_gpu_compression_decompression_implementation_plan_example", test_rl_gpu_compression_decompression_implementation_plan_example},
     {"test_rl_gpu_compression_decompresion_empty", test_rl_gpu_compression_decompresion_empty},
