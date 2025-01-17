@@ -391,7 +391,7 @@ namespace RunLength
                 uint32_t diff = size;
                 if (diff > 255)
                 {
-                    d_recalculateSequence[0] = diff / 255;
+                    d_recalculateSequence[0] = (diff / 255) + 1;
                     atomicOr(s_shouldRecalculate, 1);
                 }
             }
@@ -401,7 +401,7 @@ namespace RunLength
             auto diff = d_startIndicies[threadId + 1] - d_startIndicies[threadId];
             if (diff > 255)
             {
-                d_recalculateSequence[threadId] = diff / 255;
+                d_recalculateSequence[threadId] = (diff / 255) + 1;
                 atomicOr(s_shouldRecalculate, 1);
             }
         }
@@ -448,7 +448,7 @@ namespace RunLength
         if (threadId < allThreads)
         {
             auto j = binarySearchInsideRange(d_recalculateSequence, recalculateSequenceLength, threadId);
-            auto k = threadId - d_recalculateSequence[j] + 1;
+            auto k = threadId - d_recalculateSequence[j];
             d_startMask[d_startIndicies[j] + k * 255] = 1;
         }
     }
