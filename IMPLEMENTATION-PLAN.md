@@ -2,7 +2,7 @@
 
 _Kacper Trzciński_
 
-## Fixed-Lenght
+## Fixed-Length
 
 ### Kompresja
 
