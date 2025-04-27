@@ -5,6 +5,7 @@
 
 namespace FixedLength
 {
+    FLCompressed gpuMPICompress(uint8_t *data, size_t size);
     FLCompressed cpuCompress(uint8_t *data, size_t size);
     FLDecompressed cpuDecompress(size_t outputSize, uint8_t *bits, size_t bitsSize, uint8_t *values, size_t valuesSize);
 }

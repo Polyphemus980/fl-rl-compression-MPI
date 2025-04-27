@@ -51,7 +51,7 @@ void compress(ArgsParser::Method method, const char *input, const char *output)
         {
             if (method == ArgsParser::Method::FixedLength)
             {
-                compressed = FixedLength::gpuCompress(content.data, content.size);
+                compressed = FixedLength::gpuMPICompress(content.data, content.size);
             }
             else
             {

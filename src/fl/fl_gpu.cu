@@ -2,14 +2,48 @@
 #include <thrust/functional.h>
 #include <thrust/scan.h>
 #include <stdexcept>
+#include <mpi.h>
 
 #include "fl_gpu.cuh"
+#include "fl_common.cuh"
 #include "../utils.cuh"
 #include "../timers/cpu_timer.cuh"
 #include "../timers/gpu_timer.cuh"
 
 namespace FixedLength
 {
+    FLCompressed gpuMPICompress(uint8_t *data, size_t size)
+    {
+        int rank, nodesSize;
+        MPI_Init(NULL, NULL);
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+        MPI_Comm_size(MPI_COMM_WORLD, &nodesSize);
+
+        printf("[INFO] Process %d of %d started\n", rank, nodesSize);
+
+        int dataPerNodeSize = (size / (128 * nodesSize)) * 128;
+
+        int lastNodeData = size - (nodesSize - 1) * dataPerNodeSize;
+
+        FLCompressed compressedData = gpuCompress(data + rank * dataPerNodeSize, rank == nodesSize - 1 ? lastNodeData : dataPerNodeSize);
+        if (rank == 0)
+        {
+            FLCompressed *compressedWholeData = new FLCompressed[nodesSize];
+            compressedWholeData[rank] = compressedData;
+            for (int i = 1; i < nodesSize; i++)
+            {
+                compressedWholeData[i] = FixedLength::FLCompressed::ReceiveFLCompressed(i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            }
+            MPI_Finalize();
+            return FixedLength::FLCompressed::MergeFLCompressed(compressedWholeData, nodesSize);
+        }
+        else
+        {
+            FixedLength::FLCompressed::SendFLCompressed(compressedData, 0, 0, MPI_COMM_WORLD);
+            MPI_Finalize();
+            exit(0);
+        }
+    }
     // Main functions
     FLCompressed gpuCompress(uint8_t *data, size_t size)
     {

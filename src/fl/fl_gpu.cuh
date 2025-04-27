@@ -9,6 +9,7 @@ namespace FixedLength
     static constexpr size_t BLOCK_SIZE = 1024;
 
     // Main functions
+    FLCompressed gpuMPICompress(uint8_t *data, size_t size);
     FLCompressed gpuCompress(uint8_t *data, size_t size);
     FLDecompressed gpuDecompress(size_t outputSize, uint8_t *bits, size_t bitsSize, uint8_t *values, size_t valuesSize);
 
