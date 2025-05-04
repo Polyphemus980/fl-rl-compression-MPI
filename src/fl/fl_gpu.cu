@@ -12,34 +12,28 @@
 
 namespace FixedLength
 {
-    FLCompressed gpuMPICompress(uint8_t *data, size_t size)
+    FLCompressed gpuMPICompress(uint8_t *data, size_t size,MpiData mpiData)
     {
-        int rank, nodesSize;
-        MPI_Init(NULL, NULL);
-        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-        MPI_Comm_size(MPI_COMM_WORLD, &nodesSize);
-
-        printf("[INFO] Process %d of %d started\n", rank, nodesSize);
-
-        int dataPerNodeSize = (size / (128 * nodesSize)) * 128;
-
-        int lastNodeData = size - (nodesSize - 1) * dataPerNodeSize;
-
-        FLCompressed compressedData = gpuCompress(data + rank * dataPerNodeSize, rank == nodesSize - 1 ? lastNodeData : dataPerNodeSize);
+        int rank = mpiData.rank;
+        int nodesCount = mpiData.nodesCount;
+        FLCompressed compressedData = gpuCompress(data, size);
         if (rank == 0)
         {
-            FLCompressed *compressedWholeData = new FLCompressed[nodesSize];
+            FLCompressed *compressedWholeData = new FLCompressed[nodesCount];
             compressedWholeData[rank] = compressedData;
-            for (int i = 1; i < nodesSize; i++)
+            printf("HERE before\n");
+            for (int i = 1; i < nodesCount; i++)
             {
                 compressedWholeData[i] = FixedLength::FLCompressed::ReceiveFLCompressed(i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             }
+            printf("HERE \n");
             MPI_Finalize();
-            return FixedLength::FLCompressed::MergeFLCompressed(compressedWholeData, nodesSize);
+            return FixedLength::FLCompressed::MergeFLCompressed(compressedWholeData, nodesCount);
         }
         else
-        {
+        {printf("Here from %d before \n",rank);
             FixedLength::FLCompressed::SendFLCompressed(compressedData, 0, 0, MPI_COMM_WORLD);
+            printf("Here from %d \n",rank);
             MPI_Finalize();
             exit(0);
         }

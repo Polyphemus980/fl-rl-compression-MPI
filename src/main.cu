@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <cstdint>
 #include <stdexcept>
+#include <optional>
 
 #include "args_parser.cuh"
 #include "file_io.cuh"
@@ -9,6 +10,7 @@
 #include "./fl/fl_gpu.cuh"
 #include "./rl/rl_cpu.cuh"
 #include "./rl/rl_gpu.cuh"
+#include "./fl/mpi_common.cuh"
 
 void compress(ArgsParser::Method method, const char *input, const char *output);
 void decompress(ArgsParser::Method method, const char *input, const char *output);
@@ -30,12 +32,33 @@ int main(int argc, char **argv)
     return 0;
 }
 
+MpiData initMPI()
+{
+    int rank, nodesCount;
+    MPI_Init(NULL, NULL);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &nodesCount);
+
+    printf("[INFO] Process %d of %d started\n", rank, nodesCount);
+    return MpiData(rank, nodesCount);
+}
+
 void compress(ArgsParser::Method method, const char *input, const char *output)
 {
+
     FileIO::FileData content;
+    std::optional<MpiData> data = std::nullopt;
     try
     {
-        content = FileIO::loadFile(input);
+        if (method == ArgsParser::Method::FixedLength)
+        {
+            data = initMPI();
+            content = FileIO::loadFileMpi(input, data.value());
+        }
+        else
+        {
+            content = FileIO::loadFile(input);
+        }
     }
     catch (const std::exception &e)
     {
@@ -51,7 +74,7 @@ void compress(ArgsParser::Method method, const char *input, const char *output)
         {
             if (method == ArgsParser::Method::FixedLength)
             {
-                compressed = FixedLength::gpuMPICompress(content.data, content.size);
+                compressed = FixedLength::gpuMPICompress(content.data, content.size,data.value());
             }
             else
             {

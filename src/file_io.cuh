@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include "./fl/fl_common.cuh"
+#include "./fl/mpi_common.cuh"
 #include "./rl/rl_common.cuh"
 
 namespace FileIO
@@ -19,6 +20,7 @@ namespace FileIO
     };
 
     FileData loadFile(const char *path);
+    FileData loadFileMpi(const char* path, MpiData mpiData);
     FixedLength::FLCompressed loadCompressedFL(const char *path);
     RunLength::RLCompressed loadCompressedRL(const char *path);
 
