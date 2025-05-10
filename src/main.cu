@@ -39,7 +39,7 @@ void compress(ArgsParser::Method method, const char *input, const char *output)
     {
         if (method == ArgsParser::Method::FixedLengthMPI)
         {
-            data = initMPI();
+            data = FixedLength::initMPI();
             content = FileIO::loadFileMpi(input, data);
         }
         else
