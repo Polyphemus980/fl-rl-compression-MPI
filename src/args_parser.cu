@@ -31,6 +31,10 @@ namespace ArgsParser
         {
             m = Method::FixedLengthMPI;
         }
+        else if (strcmp(argv[2],"fl") == 0)
+        {
+             m = Method::FixedLength;
+        }
         else if (strcmp(argv[2], "fl-cpu") == 0)
         {
             m = Method::FixedLengthCPU;

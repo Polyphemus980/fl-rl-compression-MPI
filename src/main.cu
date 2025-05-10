@@ -67,9 +67,13 @@ void compress(ArgsParser::Method method, const char *input, const char *output)
     FixedLength::FLCompressed compressed;
     try
     {
-        if (method == ArgsParser::Method::FixedLength)
+        if (method == ArgsParser::Method::FixedLengthMPI)
         {
             compressed = FixedLength::gpuMPICompress(content.data, content.size, data);
+        }
+        else if (method == ArgsParser::Method::FixedLength)
+        {
+            compressed = FixedLength::gpuCompress(content.data,content.size);
         }
         else
         {
