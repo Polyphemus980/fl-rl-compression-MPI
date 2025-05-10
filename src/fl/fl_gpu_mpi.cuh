@@ -1,20 +1,18 @@
-#ifndef FL_GPU_MPI_H
-#define FL_GPU_MPI_H
+#ifndef FL_GPU_MPI_CUH
+#define FL_GPU_MPI_CUH
 
-#include <mpi.h>
-
+#include <cstdint>
+#include <cstddef>
 #include "fl_common.cuh"
 
 namespace FixedLength {
-    struct MpiData
-    {
+    // MPI data structure
+    struct MpiData {
         int rank;
         int nodesCount;
-
+        
         MpiData() : rank(0), nodesCount(0) {}
-
-        MpiData(int rank, int nodesCount)
-            : rank(rank), nodesCount(nodesCount) {}
+        MpiData(int r, int n) : rank(r), nodesCount(n) {}
     };
 
     struct MetaData {
@@ -22,10 +20,9 @@ namespace FixedLength {
         size_t valuesSize;
         size_t inputSize;
     };
-
+    // Function declarations
     MpiData initMPI();
-
     FLCompressed gpuMPICompress(uint8_t *data, size_t size, MpiData mpiData);
 }
 
-#endif
+#endif // FL_GPU_MPI_CUH

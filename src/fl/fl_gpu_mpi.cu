@@ -14,7 +14,6 @@ namespace FixedLength {
         MPI_Init(NULL, NULL);
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
         MPI_Comm_size(MPI_COMM_WORLD, &nodesCount);
-        
         printf("[INFO] Process %d of %d started\n", rank, nodesCount);
         return MpiData(rank, nodesCount);
     }
@@ -95,7 +94,6 @@ namespace FixedLength {
         );
         
         cpuTimer.end();
-    
         if (rank == 0) {
             cpuTimer.printResult("Gather compressed data from all nodes");
             
@@ -137,6 +135,9 @@ namespace FixedLength {
             cpuTimer.printResult("Send compressed data to node 0");
             MPI_Finalize();
             exit(0);
+            // We need to return something here even though this path calls exit()
+            // This is to satisfy the compiler
+            return FLCompressed(); 
         }
     }
 }
