@@ -1,4 +1,7 @@
 #include <mpi.h>
+#include <vector>
+#include <cstring>
+#include <utility>
 
 #include "fl_gpu.cuh"
 #include "fl_gpu_mpi.cuh"
