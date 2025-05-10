@@ -4,7 +4,6 @@
 #include <cstdint>
 #include "./fl/fl_common.cuh"
 #include "./fl/mpi_common.cuh"
-#include "./rl/rl_common.cuh"
 
 namespace FileIO
 {
@@ -16,18 +15,14 @@ namespace FileIO
         FileData();
         FileData(uint8_t *data, size_t size);
         FileData(FixedLength::FLDecompressed flDecompressed);
-        FileData(RunLength::RLDecompressed rlDecompressed);
     };
 
     FileData loadFile(const char *path);
-    FileData loadFileMpi(const char* path, MpiData mpiData);
+    FileData loadFileMpi(const char *path, MpiData mpiData);
     FixedLength::FLCompressed loadCompressedFL(const char *path);
-    RunLength::RLCompressed loadCompressedRL(const char *path);
 
     void saveFile(const char *path, FileData fileData);
     void saveCompressedFL(const char *path, FixedLength::FLCompressed flCompressed);
-    void saveCompressedRL(const char *path, RunLength::RLCompressed rlCompressed);
-
 } // FileIO
 
 #endif // FILE_IO

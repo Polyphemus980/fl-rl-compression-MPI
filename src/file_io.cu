@@ -25,13 +25,8 @@ namespace FileIO
         size = flDecompressed.size;
     }
 
-    FileData::FileData(RunLength::RLDecompressed rlDecompressed)
+    FileData loadFileMpi(const char *path, MpiData mpiData)
     {
-        data = rlDecompressed.data;
-        size = rlDecompressed.size;
-    }
-
-    FileData loadFileMpi(const char* path,MpiData mpiData){
         Timers::CpuTimer cpuTimer;
 
         cpuTimer.start();
@@ -47,13 +42,13 @@ namespace FileIO
         fseek(file, 0, SEEK_END);
         size_t fileSize = ftell(file);
         fseek(file, 0, SEEK_SET);
-        
+
         size_t dataPerNode = fileSize / mpiData.nodesCount;
 
         size_t lastNodeData = fileSize - (mpiData.nodesCount - 1) * dataPerNode;
-        
+
         size_t nodeFileSize = mpiData.rank == mpiData.nodesCount - 1 ? lastNodeData : dataPerNode;
-        
+
         size_t fileOffset = mpiData.rank * dataPerNode;
 
         // Allocate memory for file data
@@ -83,6 +78,7 @@ namespace FileIO
 
         return FileData(fileData, nodeFileSize);
     }
+
     FileData loadFile(const char *path)
     {
         Timers::CpuTimer cpuTimer;
@@ -204,74 +200,6 @@ namespace FileIO
         return FixedLength::FLCompressed(bits, bitsSize, values, valuesSize, inputSize);
     }
 
-    RunLength::RLCompressed loadCompressedRL(const char *path)
-    {
-        Timers::CpuTimer cpuTimer;
-
-        cpuTimer.start();
-
-        // Open file
-        FILE *file = fopen(path, "rb");
-        if (file == nullptr)
-        {
-            throw std::runtime_error("[FileIO] Cannot open file");
-        }
-
-        // Read arrays size
-        size_t size;
-        size_t readCount = fread(&size, sizeof(size_t), 1, file);
-        if (readCount != 1)
-        {
-            fclose(file);
-            throw std::runtime_error("[FileIO] Cannot read file content");
-        }
-
-        if (size == 0)
-        {
-            fclose(file);
-            return RunLength::RLCompressed();
-        }
-
-        // Read counts array
-        uint8_t *counts = reinterpret_cast<uint8_t *>(malloc(sizeof(uint8_t) * size));
-        if (counts == nullptr)
-        {
-            fclose(file);
-            throw std::runtime_error("[FileIO] Cannot allocate memory");
-        }
-        readCount = fread(counts, sizeof(uint8_t), size, file);
-        if (readCount != size)
-        {
-            fclose(file);
-            free(counts);
-            throw std::runtime_error("[FileIO] Cannot read file content");
-        }
-
-        // Read values array
-        uint8_t *values = reinterpret_cast<uint8_t *>(malloc(sizeof(uint8_t) * size));
-        if (values == nullptr)
-        {
-            fclose(file);
-            throw std::runtime_error("[FileIO] Cannot allocate memory");
-        }
-        readCount = fread(values, sizeof(uint8_t), size, file);
-        if (readCount != size)
-        {
-            fclose(file);
-            free(counts);
-            free(values);
-            throw std::runtime_error("[FileIO] Cannot read file content");
-        }
-
-        // Cleanup
-        fclose(file);
-
-        cpuTimer.end();
-        cpuTimer.printResult("Load data from file");
-
-        return RunLength::RLCompressed(values, counts, size);
-    }
-
     void saveFile(const char *path, FileData fileData)
     {
         Timers::CpuTimer cpuTimer;
@@ -359,49 +287,4 @@ namespace FileIO
         cpuTimer.end();
         cpuTimer.printResult("Save data to file");
     }
-
-    void saveCompressedRL(const char *path, RunLength::RLCompressed rlCompressed)
-    {
-        Timers::CpuTimer cpuTimer;
-
-        cpuTimer.start();
-
-        // Open file
-        FILE *file = fopen(path, "wb");
-        if (file == nullptr)
-        {
-            throw std::runtime_error("[FileIO] Cannot open file");
-        }
-
-        // Save count
-        size_t writeCount = fwrite(&rlCompressed.count, sizeof(size_t), 1, file);
-        if (writeCount != 1)
-        {
-            fclose(file);
-            throw std::runtime_error("[FileIO] Cannot write to file");
-        }
-
-        // Save counts array
-        writeCount = fwrite(rlCompressed.outputCounts, sizeof(uint8_t), rlCompressed.count, file);
-        if (writeCount != rlCompressed.count)
-        {
-            fclose(file);
-            throw std::runtime_error("[FileIO] Cannot write to file");
-        }
-
-        // Save values array
-        writeCount = fwrite(rlCompressed.outputValues, sizeof(uint8_t), rlCompressed.count, file);
-        if (writeCount != rlCompressed.count)
-        {
-            fclose(file);
-            throw std::runtime_error("[FileIO] Cannot write to file");
-        }
-
-        // Cleanup
-        fclose(file);
-
-        cpuTimer.end();
-        cpuTimer.printResult("Save data to file");
-    }
-
 } // FileIO

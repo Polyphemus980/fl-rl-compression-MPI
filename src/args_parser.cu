@@ -27,21 +27,21 @@ namespace ArgsParser
         }
 
         Method m;
-        if (strcmp(argv[2], "fl") == 0)
+        if (strcmp(argv[2], "fl-mpi") == 0)
         {
-            m = Method::FixedLength;
+            m = Method::FixedLengthMPI;
         }
         else if (strcmp(argv[2], "fl-cpu") == 0)
         {
             m = Method::FixedLengthCPU;
         }
-        else if (strcmp(argv[2], "rl") == 0)
+        else if (strcmp(argv[2], "fl-nccl") == 0)
         {
-            m = Method::RunLength;
+            m = Method::FixedLengthNVCC;
         }
-        else if (strcmp(argv[2], "rl-cpu") == 0)
+        else if (strcmp(argv[2], "fl-shmem") == 0)
         {
-            m = Method::RunLengthCPU;
+            m = Method::FixedLengthSHMEM;
         }
         else
         {
@@ -59,7 +59,7 @@ namespace ArgsParser
     {
         fprintf(stderr, "USAGE: %s operation method input_file output_file\n", s);
         fprintf(stderr, "operation - c (compress) or d (decompress)\n");
-        fprintf(stderr, "method - fl (fixed-length), fl-cpu (fixed-length using cpu), rl (run-length), rl-cpu (run-length using cpu)\n");
+        fprintf(stderr, "method - fl (fixed-length using gpu), fl-cpu (fixed-length using cpu), gl-mpi (fixed-length using gpu and mpi), fl-nccl (fixed-length using gpu and nccl), fl-nccl (fixed-length using gpu and shmem)\n");
         std::exit(1);
     }
 } // ArgsParser

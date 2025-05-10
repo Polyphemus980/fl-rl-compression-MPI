@@ -11,9 +11,10 @@ namespace ArgsParser
 
     enum class Method
     {
-        RunLength,
-        RunLengthCPU,
         FixedLength,
+        FixedLengthMPI,
+        FixedLengthNVCC,
+        FixedLengthSHMEM,
         FixedLengthCPU,
     };
 
