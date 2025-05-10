@@ -17,13 +17,15 @@ namespace FixedLength {
             : rank(rank), nodesCount(nodesCount) {}
     };
 
+    struct MetaData {
+        size_t bitsSize;
+        size_t valuesSize;
+        size_t inputSize;
+    };
+
     MpiData initMPI();
 
     FLCompressed gpuMPICompress(uint8_t *data, size_t size, MpiData mpiData);
-
-    int SendFLCompressed(const FLCompressed &data, int destination, int tag, MPI_Comm comm);
-    FLCompressed ReceiveFLCompressed(int source, int tag, MPI_Comm comm, MPI_Status *status);
-    FLCompressed MergeFLCompressed(const FLCompressed *structs, int count);
 }
 
 #endif

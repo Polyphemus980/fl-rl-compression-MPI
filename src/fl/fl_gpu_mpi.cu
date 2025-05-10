@@ -27,142 +27,116 @@ namespace FixedLength {
         int nodesCount = mpiData.nodesCount;
         FLCompressed compressedData = gpuCompress(data, size);
         
-        if (rank == 0)
-        {
-            FLCompressed *compressedWholeData = new FLCompressed[nodesCount];
-            compressedWholeData[rank] = compressedData;
-            cpuTimer.start();
-            for (int i = 1; i < nodesCount; i++)
-            {
-                compressedWholeData[i] = FixedLength::FLCompressed::ReceiveFLCompressed(i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        // Prepare local metadata
+        MetaData localMeta = {
+            compressedData.bitsSize,
+            compressedData.valuesSize,
+            compressedData.inputSize
+        };
+        
+        // Gather metadata from all ranks to rank 0
+        std::vector<MetaData> allMeta;
+        if (rank == 0) {
+            allMeta.resize(nodesCount);
+        }
+        
+        cpuTimer.start();
+        MPI_Gather(&localMeta, sizeof(MetaData), MPI_BYTE,
+                rank == 0 ? allMeta.data() : nullptr, 
+                sizeof(MetaData), MPI_BYTE,
+                0, MPI_COMM_WORLD);
+        
+        // On rank 0, allocate arrays for gathering compressed data
+        std::vector<int> bitsRecvCounts, bitsDisplacements;
+        std::vector<int> valuesRecvCounts, valuesDisplacements;
+        std::vector<uint8_t> allBits, allValues;
+        size_t totalBitsSize = 0, totalValuesSize = 0;
+        
+        if (rank == 0) {
+            bitsRecvCounts.resize(nodesCount);
+            bitsDisplacements.resize(nodesCount);
+            valuesRecvCounts.resize(nodesCount);
+            valuesDisplacements.resize(nodesCount);
+            
+            // Calculate displacements and total sizes
+            for (int i = 0; i < nodesCount; i++) {
+                bitsRecvCounts[i] = static_cast<int>(allMeta[i].bitsSize);
+                bitsDisplacements[i] = static_cast<int>(totalBitsSize);
+                totalBitsSize += allMeta[i].bitsSize;
+                
+                valuesRecvCounts[i] = static_cast<int>(allMeta[i].valuesSize);
+                valuesDisplacements[i] = static_cast<int>(totalValuesSize);
+                totalValuesSize += allMeta[i].valuesSize;
             }
-            cpuTimer.end();
-            cpuTimer.printResult("Receive compressed data from all nodes");
+            
+            // Allocate space for received data
+            allBits.resize(totalBitsSize);
+            allValues.resize(totalValuesSize);
+        }
+            
+        // Gather bits data
+        MPI_Gatherv(
+            compressedData.outputBits, static_cast<int>(compressedData.bitsSize), MPI_UNSIGNED_CHAR,
+            rank == 0 ? allBits.data() : nullptr, 
+            rank == 0 ? bitsRecvCounts.data() : nullptr,
+            rank == 0 ? bitsDisplacements.data() : nullptr, 
+            MPI_UNSIGNED_CHAR,
+            0, MPI_COMM_WORLD
+        );
+        
+        // Gather values data
+        MPI_Gatherv(
+            compressedData.outputValues, static_cast<int>(compressedData.valuesSize), MPI_UNSIGNED_CHAR,
+            rank == 0 ? allValues.data() : nullptr, 
+            rank == 0 ? valuesRecvCounts.data() : nullptr,
+            rank == 0 ? valuesDisplacements.data() : nullptr, 
+            MPI_UNSIGNED_CHAR,
+            0, MPI_COMM_WORLD
+        );
+        
+        cpuTimer.end();
+    
+        if (rank == 0) {
+            cpuTimer.printResult("Gather compressed data from all nodes");
+            
+            // Construct FLCompressed objects for each rank
+            FLCompressed *compressedWholeData = new FLCompressed[nodesCount];
+            
+            for (int i = 0; i < nodesCount; i++) {
+                uint8_t *nodeBits = nullptr;
+                uint8_t *nodeValues = nullptr;
+                
+                if (allMeta[i].bitsSize > 0) {
+                    nodeBits = new uint8_t[allMeta[i].bitsSize];
+                    std::memcpy(nodeBits, allBits.data() + bitsDisplacements[i], allMeta[i].bitsSize);
+                }
+                
+                if (allMeta[i].valuesSize > 0) {
+                    nodeValues = new uint8_t[allMeta[i].valuesSize];
+                    std::memcpy(nodeValues, allValues.data() + valuesDisplacements[i], allMeta[i].valuesSize);
+                }
+                
+                compressedWholeData[i] = FLCompressed(
+                    nodeBits, allMeta[i].bitsSize,
+                    nodeValues, allMeta[i].valuesSize,
+                    allMeta[i].inputSize
+                );
+            }
+            
+            // Set our compressed data for rank 0 (avoiding memory allocation/copy overhead)
+            if (compressedData.bitsSize > 0 || compressedData.valuesSize > 0) {
+                // Keep our original allocation for rank 0 data (it will be managed by MergeFLCompressed)
+                compressedWholeData[0] = std::move(compressedData);
+            }
+            
             MPI_Finalize();
+            // Merge all the compressed data and return
             return FixedLength::FLCompressed::MergeFLCompressed(compressedWholeData, nodesCount);
         }
-        else
-        {
-            cpuTimer.start();
-            FixedLength::FLCompressed::SendFLCompressed(compressedData, 0, 0, MPI_COMM_WORLD);
-            cpuTimer.end();
+        else {
             cpuTimer.printResult("Send compressed data to node 0");
             MPI_Finalize();
             exit(0);
         }
     }
-
-    int SendFLCompressed(const FLCompressed &data, int destination, int tag, MPI_Comm comm)
-    {
-        int rank;
-        MPI_Comm_rank(comm, &rank);
-
-        // First send the sizes
-        size_t sizes[3] = {data.bitsSize, data.valuesSize, data.inputSize};
-        MPI_Send(sizes, 3, MPI_UNSIGNED_LONG, destination, tag, comm);
-
-        // Then send the actual data if sizes are non-zero
-        if (data.bitsSize > 0 && data.outputBits != nullptr)
-        {
-            MPI_Send(data.outputBits, data.bitsSize, MPI_UNSIGNED_CHAR, destination, tag + 1, comm);
-        }
-
-        if (data.valuesSize > 0 && data.outputValues != nullptr)
-        {
-            MPI_Send(data.outputValues, data.valuesSize, MPI_UNSIGNED_CHAR, destination, tag + 2, comm);
-        }
-
-        return MPI_SUCCESS;
-    }
-
-    // To receive the FLCompressed struct
-    FLCompressed ReceiveFLCompressed(int source, int tag, MPI_Comm comm, MPI_Status *status)
-    {
-        // Receive the sizes first
-        size_t sizes[3];
-        MPI_Recv(sizes, 3, MPI_UNSIGNED_LONG, source, tag, comm, status);
-
-
-        size_t bitsSize = sizes[0];
-        size_t valuesSize = sizes[1];
-        size_t inputSize = sizes[2];
-
-        // Allocate memory for the data
-        uint8_t *outputBits = nullptr;
-        uint8_t *outputValues = nullptr;
-
-        if (bitsSize > 0)
-        {
-            outputBits = new uint8_t[bitsSize];
-            MPI_Recv(outputBits, bitsSize, MPI_UNSIGNED_CHAR, source, tag + 1, comm, status);
-        }
-
-        if (valuesSize > 0)
-        {
-            outputValues = new uint8_t[valuesSize];
-            MPI_Recv(outputValues, valuesSize, MPI_UNSIGNED_CHAR, source, tag + 2, comm, status);
-        }
-
-        // Create and return the struct
-        return FLCompressed(outputBits, bitsSize, outputValues, valuesSize, inputSize);
-    }
-
-    FLCompressed MergeFLCompressed(const FLCompressed *structs, int count)
-    {
-        if (count <= 0)
-        {
-            return FLCompressed();
-        }
-
-        // Calculate total sizes
-        size_t totalBitsSize = 0;
-        size_t totalValuesSize = 0;
-        size_t totalInputSize = 0;
-
-        for (int i = 0; i < count; i++)
-        {
-            totalBitsSize += structs[i].bitsSize;
-            totalValuesSize += structs[i].valuesSize;
-            totalInputSize += structs[i].inputSize;
-        }
-
-        // Allocate memory for merged data
-        uint8_t *mergedBits = nullptr;
-        uint8_t *mergedValues = nullptr;
-
-        if (totalBitsSize > 0)
-        {
-            mergedBits = new uint8_t[totalBitsSize];
-        }
-
-        if (totalValuesSize > 0)
-        {
-            mergedValues = new uint8_t[totalValuesSize];
-        }
-
-        // Copy data from each struct
-        size_t bitsOffset = 0;
-        size_t valuesOffset = 0;
-
-        for (int i = 0; i < count; i++)
-        {
-            // Copy bits array
-            if (structs[i].bitsSize > 0 && structs[i].outputBits != nullptr)
-            {
-                memcpy(mergedBits + bitsOffset, structs[i].outputBits, structs[i].bitsSize);
-                bitsOffset += structs[i].bitsSize;
-            }
-
-            // Copy values array
-            if (structs[i].valuesSize > 0 && structs[i].outputValues != nullptr)
-            {
-                memcpy(mergedValues + valuesOffset, structs[i].outputValues, structs[i].valuesSize);
-                valuesOffset += structs[i].valuesSize;
-            }
-        }
-
-        // Create and return the merged struct
-        return FLCompressed(mergedBits, totalBitsSize, mergedValues, totalValuesSize, totalInputSize);
-    }
-
 }
