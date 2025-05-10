@@ -3,7 +3,7 @@
 
 #include <cstdint>
 #include "./fl/fl_common.cuh"
-#include "./fl/mpi_common.cuh"
+#include "./fl/fl_gpu_mpi.cuh"
 
 namespace FileIO
 {
@@ -18,7 +18,7 @@ namespace FileIO
     };
 
     FileData loadFile(const char *path);
-    FileData loadFileMpi(const char *path, MpiData mpiData);
+    FileData loadFileMpi(const char *path, FixedLength::MpiData mpiData);
     FixedLength::FLCompressed loadCompressedFL(const char *path);
 
     void saveFile(const char *path, FileData fileData);
