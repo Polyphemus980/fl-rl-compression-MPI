@@ -12,6 +12,10 @@ namespace FixedLength {
         MpiData(int rank, int nodesCount)
             : rank(rank), nodesCount(nodesCount) {}
     };
+
+    MpiData initMPI();
+
+    FLCompressed gpuMPICompress(uint8_t *data, size_t size, MpiData mpiData);
 }
 
 #endif

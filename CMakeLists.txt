@@ -9,7 +9,7 @@ project(FlRlCompression LANGUAGES CXX CUDA)
 
 find_package(MPI REQUIRED)
 
-add_executable(compress src/main.cu src/timers/cpu_timer.cu src/timers/gpu_timer.cu src/args_parser.cu src/fl/fl_cpu.cu src/fl/fl_gpu.cu src/file_io.cu)
+add_executable(compress src/main.cu src/timers/cpu_timer.cu src/timers/gpu_timer.cu src/args_parser.cu src/fl/fl_cpu.cu src/fl/fl_gpu.cu src/file_io.cu src/fl/fl_gpu_mpi.cu)
 
 target_link_libraries(compress PRIVATE MPI::MPI_CXX)
 # Tests

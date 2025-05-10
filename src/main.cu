@@ -30,16 +30,6 @@ int main(int argc, char **argv)
     return 0;
 }
 
-FixedLength::MpiData initMPI()
-{
-    int rank, nodesCount;
-    MPI_Init(NULL, NULL);
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    MPI_Comm_size(MPI_COMM_WORLD, &nodesCount);
-
-    printf("[INFO] Process %d of %d started\n", rank, nodesCount);
-    return FixedLength::MpiData(rank, nodesCount);
-}
 
 void compress(ArgsParser::Method method, const char *input, const char *output)
 {
