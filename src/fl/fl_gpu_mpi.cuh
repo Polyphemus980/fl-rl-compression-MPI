@@ -23,6 +23,7 @@ namespace FixedLength {
     // Function declarations
     MpiData initMPI();
     FLCompressed gpuMPICompress(uint8_t *data, size_t size, MpiData mpiData);
+    FLCompressed MergeFLCompressed(const FLCompressed *structs, int count);
 }
 
 #endif // FL_GPU_MPI_CUH

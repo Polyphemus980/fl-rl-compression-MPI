@@ -132,7 +132,7 @@ namespace FixedLength {
             
             MPI_Finalize();
             // Merge all the compressed data and return
-            return FixedLength::FLCompressed::MergeFLCompressed(compressedWholeData, nodesCount);
+            return MergeFLCompressed(compressedWholeData, nodesCount);
         }
         else {
             cpuTimer.printResult("Send compressed data to node 0");
@@ -142,5 +142,63 @@ namespace FixedLength {
             // This is to satisfy the compiler
             return FLCompressed(); 
         }
+    }
+
+    FLCompressed MergeFLCompressed(const FLCompressed *structs, int count)
+    {
+        if (count <= 0)
+        {
+            return FLCompressed();
+        }
+
+        // Calculate total sizes
+        size_t totalBitsSize = 0;
+        size_t totalValuesSize = 0;
+        size_t totalInputSize = 0;
+
+        for (int i = 0; i < count; i++)
+        {
+            totalBitsSize += structs[i].bitsSize;
+            totalValuesSize += structs[i].valuesSize;
+            totalInputSize += structs[i].inputSize;
+        }
+
+        // Allocate memory for merged data
+        uint8_t *mergedBits = nullptr;
+        uint8_t *mergedValues = nullptr;
+
+        if (totalBitsSize > 0)
+        {
+            mergedBits = new uint8_t[totalBitsSize];
+        }
+
+        if (totalValuesSize > 0)
+        {
+            mergedValues = new uint8_t[totalValuesSize];
+        }
+
+        // Copy data from each struct
+        size_t bitsOffset = 0;
+        size_t valuesOffset = 0;
+
+        for (int i = 0; i < count; i++)
+        {
+            // Copy bits array
+            if (structs[i].bitsSize > 0 && structs[i].outputBits != nullptr)
+            {
+                memcpy(mergedBits + bitsOffset, structs[i].outputBits, structs[i].bitsSize);
+                bitsOffset += structs[i].bitsSize;
+            }
+
+            // Copy values array
+            if (structs[i].valuesSize > 0 && structs[i].outputValues != nullptr)
+            {
+                memcpy(mergedValues + valuesOffset, structs[i].outputValues, structs[i].valuesSize);
+                valuesOffset += structs[i].valuesSize;
+            }
+        }
+
+        // Create and return the merged struct
+        return FLCompressed(mergedBits, totalBitsSize, mergedValues, totalValuesSize, totalInputSize);
     }
 }
