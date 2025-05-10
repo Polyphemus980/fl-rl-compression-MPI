@@ -2,7 +2,7 @@
 #define FL_GPU_H
 
 #include "fl_common.cuh"
-#include "mpi_common.cuh"
+#include "fl_gpu_mpi.cuh"
 
 namespace FixedLength
 {
@@ -10,7 +10,7 @@ namespace FixedLength
     static constexpr size_t BLOCK_SIZE = 1024;
 
     // Main functions
-    FLCompressed gpuMPICompress(uint8_t *data, size_t size,MpiData mpiData);
+    FLCompressed gpuMPICompress(uint8_t *data, size_t size, MpiData mpiData);
     FLCompressed gpuCompress(uint8_t *data, size_t size);
     FLDecompressed gpuDecompress(size_t outputSize, uint8_t *bits, size_t bitsSize, uint8_t *values, size_t valuesSize);
 

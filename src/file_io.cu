@@ -25,7 +25,7 @@ namespace FileIO
         size = flDecompressed.size;
     }
 
-    FileData loadFileMpi(const char *path, MpiData mpiData)
+    FileData loadFileMpi(const char *path, FixedLength::MpiData mpiData)
     {
         Timers::CpuTimer cpuTimer;
 

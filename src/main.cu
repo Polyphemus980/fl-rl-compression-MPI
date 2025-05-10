@@ -8,7 +8,7 @@
 #include "file_io.cuh"
 #include "./fl/fl_cpu.cuh"
 #include "./fl/fl_gpu.cuh"
-#include "./fl/mpi_common.cuh"
+#include "./fl/fl_gpu_mpi.cuh"
 
 void compress(ArgsParser::Method method, const char *input, const char *output);
 void decompress(ArgsParser::Method method, const char *input, const char *output);
@@ -30,7 +30,7 @@ int main(int argc, char **argv)
     return 0;
 }
 
-MpiData initMPI()
+FixedLength::MpiData initMPI()
 {
     int rank, nodesCount;
     MPI_Init(NULL, NULL);
@@ -38,13 +38,13 @@ MpiData initMPI()
     MPI_Comm_size(MPI_COMM_WORLD, &nodesCount);
 
     printf("[INFO] Process %d of %d started\n", rank, nodesCount);
-    return MpiData(rank, nodesCount);
+    return FixedLength::MpiData(rank, nodesCount);
 }
 
 void compress(ArgsParser::Method method, const char *input, const char *output)
 {
     FileIO::FileData content;
-    MpiData data;
+    FixedLength::MpiData data;
     try
     {
         if (method == ArgsParser::Method::FixedLengthMPI)
