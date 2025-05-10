@@ -8,10 +8,41 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 project(FlRlCompression LANGUAGES CXX CUDA)
 
 find_package(MPI REQUIRED)
+include(ExternalProject)
+
+# Set NCCL build options
+set(NCCL_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/nccl")
+set(NCCL_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/external/nccl")
+set(NCCL_INSTALL_DIR "${NCCL_BINARY_DIR}/install")
+
+# Build NCCL using its native build system
+ExternalProject_Add(nccl_external
+  SOURCE_DIR "${NCCL_SOURCE_DIR}"
+  BINARY_DIR "${NCCL_BINARY_DIR}"
+  CONFIGURE_COMMAND ""
+  BUILD_COMMAND make -C "${NCCL_SOURCE_DIR}" src.build BUILDDIR=${NCCL_BINARY_DIR}
+  INSTALL_COMMAND make -C "${NCCL_SOURCE_DIR}" install DESTDIR=${NCCL_INSTALL_DIR}
+  BUILD_BYPRODUCTS "${NCCL_INSTALL_DIR}/lib/libnccl.so"
+)
+
+# Create an interface library for NCCL
+add_library(nccl INTERFACE)
+add_dependencies(nccl nccl_external)
+
+# Set include directories
+target_include_directories(nccl INTERFACE 
+  "${NCCL_INSTALL_DIR}/include"
+)
+
+# Set link libraries
+target_link_libraries(nccl INTERFACE
+  "${NCCL_INSTALL_DIR}/lib/libnccl.so"
+)
 
 add_executable(compress src/main.cu src/timers/cpu_timer.cu src/timers/gpu_timer.cu src/args_parser.cu src/fl/fl_cpu.cu src/fl/fl_gpu.cu src/file_io.cu)
 
 target_link_libraries(compress PRIVATE MPI::MPI_CXX)
+target_link_libraries(compress PRIVATE nccl)
 # Tests
 enable_testing()
 

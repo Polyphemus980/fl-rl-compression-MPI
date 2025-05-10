@@ -1,0 +1,3 @@
+[submodule "external/nccl"]
+	path = external/nccl
+	url = https://github.com/NVIDIA/nccl.git
