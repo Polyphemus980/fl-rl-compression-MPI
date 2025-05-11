@@ -63,7 +63,6 @@ namespace FixedLength
             size_t sizes[3];
             MPI_Recv(sizes, 3, MPI_UNSIGNED_LONG, source, tag, comm, status);
 
-
             size_t bitsSize = sizes[0];
             size_t valuesSize = sizes[1];
             size_t inputSize = sizes[2];
@@ -144,6 +143,32 @@ namespace FixedLength
 
             // Create and return the merged struct
             return FLCompressed(mergedBits, totalBitsSize, mergedValues, totalValuesSize, totalInputSize);
+        }
+    };
+
+    struct FLCompressedDevice
+    {
+        uint8_t *d_outputBits;
+        size_t bitsSize;
+        uint8_t *d_outputValues;
+        size_t valuesSize;
+        size_t inputSize;
+
+        FLCompressedDevice()
+        {
+            this->d_outputBits = nullptr;
+            this->bitsSize = 0;
+            this->d_outputValues = nullptr;
+            this->valuesSize = 0;
+            this->inputSize = 0;
+        };
+        FLCompressedDevice(uint8_t *outputBits, size_t bitsSize, uint8_t *outputValues, size_t valuesSize, size_t inputSize)
+        {
+            this->d_outputBits = outputBits;
+            this->bitsSize = bitsSize;
+            this->d_outputValues = outputValues;
+            this->valuesSize = valuesSize;
+            this->inputSize = inputSize;
         }
     };
 

@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <stdexcept>
 #include <optional>
+#include "nccl.h"
 
 #include "args_parser.cuh"
 #include "file_io.cuh"
@@ -41,20 +42,53 @@ MpiData initMPI()
     return MpiData(rank, nodesCount);
 }
 
+MpiNcclData initMPINCCL()
+{
+    int rank, nodesCount;
+    MPI_Init(NULL, NULL);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &nodesCount);
+
+    // Match process to GPU
+    int deviceCount;
+    cudaGetDeviceCount(&deviceCount);
+    int device = rank % deviceCount;
+    cudaSetDevice(device);
+
+    // NCCL setup
+    ncclUniqueId id;
+    if (rank == 0)
+        ncclGetUniqueId(&id);
+    MPI_Bcast(&id, sizeof(id), MPI_BYTE, 0, MPI_COMM_WORLD);
+
+    ncclComm_t comm;
+    ncclCommInitRank(&comm, nodesCount, id, rank);
+
+    printf("[INFO] Rank %d using device %d\n", rank, device);
+    return MpiNcclData(rank, nodesCount, device, comm);
+}
+
 void compress(ArgsParser::Method method, const char *input, const char *output)
 {
     FileIO::FileData content;
     MpiData data;
+    MpiNcclData ncclData;
     try
     {
-        if (method == ArgsParser::Method::FixedLengthMPI)
+        switch (method)
         {
+        case ArgsParser::Method::FixedLengthMPI:
             data = initMPI();
             content = FileIO::loadFileMpi(input, data);
-        }
-        else
-        {
+            break;
+        case ArgsParser::Method::FixedLengthNVCC:
+            ncclData = initMPINCCL();
+            content = FileIO::loadFileNccl(input, ncclData);
+            std::cout << "SIGMA HERE WAS (LION)\n";
+            break;
+        default:
             content = FileIO::loadFile(input);
+            break;
         }
     }
     catch (const std::exception &e)
@@ -67,17 +101,19 @@ void compress(ArgsParser::Method method, const char *input, const char *output)
     FixedLength::FLCompressed compressed;
     try
     {
-        if (method == ArgsParser::Method::FixedLengthMPI)
+        switch (method)
         {
+        case ArgsParser::Method::FixedLengthMPI:
             compressed = FixedLength::gpuMPICompress(content.data, content.size, data);
-        }
-        else if (method == ArgsParser::Method::FixedLength)
-        {
-            compressed = FixedLength::gpuCompress(content.data,content.size);
-        }
-        else
-        {
+            break;
+        case ArgsParser::Method::FixedLength:
+            compressed = FixedLength::gpuCompress(content.data, content.size);
+            break;
+        case ArgsParser::Method::FixedLengthNVCC:
+            compressed = FixedLength::gpuNCCLCompress(content.data, content.size, ncclData);
+        default:
             compressed = FixedLength::cpuCompress(content.data, content.size);
+            break;
         }
         FileIO::saveCompressedFL(output, compressed);
     }

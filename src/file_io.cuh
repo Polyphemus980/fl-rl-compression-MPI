@@ -20,7 +20,7 @@ namespace FileIO
     FileData loadFile(const char *path);
     FileData loadFileMpi(const char *path, MpiData mpiData);
     FixedLength::FLCompressed loadCompressedFL(const char *path);
-
+    FileData loadFileNccl(const char *path, MpiNcclData mpiData);
     void saveFile(const char *path, FileData fileData);
     void saveCompressedFL(const char *path, FixedLength::FLCompressed flCompressed);
 } // FileIO

@@ -4,6 +4,7 @@
             "name": "Linux",
             "includePath": [
                 "${workspaceFolder}/**",
+                "${workspaceFolder}/external/nccl/src/include",
                 "/usr/local/cuda",
                 "/usr/lib/x86_64-linux-gnu/openmpi/include",
                 "/usr/local/cuda-12.8/targets/x86_64-linux/include"
