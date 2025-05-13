@@ -70,6 +70,9 @@ namespace FileIO
             throw std::runtime_error("[FileIO] Cannot read file content");
         }
 
+        // Print read content
+        printf("[Rank %d] Read: %s\n", mpiData.rank, fileData);
+
         // Cleanuo
         fclose(file);
 
@@ -123,6 +126,9 @@ namespace FileIO
             fclose(file);
             throw std::runtime_error("[FileIO] Cannot read file content");
         }
+
+        // Print read content
+        printf("[Rank %d] Read: %s\n", mpiData.rank, fileData);
 
         // Cleanuo
         fclose(file);
