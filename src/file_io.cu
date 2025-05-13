@@ -25,113 +25,61 @@ namespace FileIO
         size = flDecompressed.size;
     }
 
-    FileData loadFileMpi(const char *path, MpiData mpiData)
-    {
+    FileData loadFileMpi(const char* path, MpiData mpiData) {
         Timers::CpuTimer cpuTimer;
-
         cpuTimer.start();
-
-        // Open file
-        FILE *file = fopen(path, "rb");
-        if (file == nullptr)
-        {
-            throw std::runtime_error("[FileIO] Cannot open file");
-        }
-
-        // Check file size
-        fseek(file, 0, SEEK_END);
-        size_t fileSize = ftell(file);
-        fseek(file, 0, SEEK_SET);
-
-        size_t dataPerNode = fileSize / mpiData.nodesCount;
-
-        size_t lastNodeData = fileSize - (mpiData.nodesCount - 1) * dataPerNode;
-
-        size_t nodeFileSize = mpiData.rank == mpiData.nodesCount - 1 ? lastNodeData : dataPerNode;
-
-        size_t fileOffset = mpiData.rank * dataPerNode;
-
-        // Allocate memory for file data
-        uint8_t *fileData = reinterpret_cast<uint8_t *>(malloc(sizeof(uint8_t) * nodeFileSize));
-        if (fileData == nullptr)
-        {
-            fclose(file);
-            throw std::runtime_error("[FileIO] Cannot allocate memory");
-        }
-
-        fseek(file, fileOffset, SEEK_SET);
-
-        // Read file data
-        size_t readCount = fread(fileData, sizeof(uint8_t), nodeFileSize, file);
-        if (readCount != nodeFileSize)
-        {
-            free(fileData);
-            fclose(file);
-            throw std::runtime_error("[FileIO] Cannot read file content");
-        }
-
-        // Cleanuo
-        fclose(file);
-
-        cpuTimer.end();
-        cpuTimer.printResult("Load data from file");
-
-        return FileData(fileData, nodeFileSize);
-    }
     
-    FileData loadFileNccl(const char *path, MpiNcclData mpiData)
-    {
-        Timers::CpuTimer cpuTimer;
-
-        cpuTimer.start();
-
         // Open file
-        FILE *file = fopen(path, "rb");
-        if (file == nullptr)
-        {
+        FILE* file = fopen(path, "rb");
+        if (file == nullptr) {
             throw std::runtime_error("[FileIO] Cannot open file");
         }
-
-        // Check file size
+    
+        // Get file size
         fseek(file, 0, SEEK_END);
         size_t fileSize = ftell(file);
         fseek(file, 0, SEEK_SET);
-
-        size_t dataPerNode = fileSize / mpiData.nodesCount;
-
-        size_t lastNodeData = fileSize - (mpiData.nodesCount - 1) * dataPerNode;
-
-        size_t nodeFileSize = mpiData.rank == mpiData.nodesCount - 1 ? lastNodeData : dataPerNode;
-
-        size_t fileOffset = mpiData.rank * dataPerNode;
-
-        // Allocate memory for file data
-        uint8_t *fileData = reinterpret_cast<uint8_t *>(malloc(sizeof(uint8_t) * nodeFileSize));
-        if (fileData == nullptr)
-        {
+    
+        // Round up total file size to multiple of 128
+        constexpr size_t ALIGNMENT = 128;
+        size_t alignedFileSize = (fileSize + ALIGNMENT - 1) / ALIGNMENT * ALIGNMENT;
+    
+        // Divide work across nodes
+        size_t alignedPerNode = alignedFileSize / mpiData.nodesCount;
+    
+        // For all nodes except last, they read exactly alignedPerNode
+        // Last node reads remaining bytes (might go slightly past original fileSize)
+        size_t nodeOffset = mpiData.rank * alignedPerNode;
+        size_t nodeReadSize = (mpiData.rank == mpiData.nodesCount - 1)
+            ? fileSize - nodeOffset
+            : alignedPerNode;
+    
+        if (nodeOffset >= fileSize) {
+            nodeReadSize = 0;  // Nothing to read
+        }
+    
+        // Allocate buffer and read
+        uint8_t* fileData = reinterpret_cast<uint8_t*>(malloc(nodeReadSize));
+        if (fileData == nullptr) {
             fclose(file);
             throw std::runtime_error("[FileIO] Cannot allocate memory");
         }
-
-        fseek(file, fileOffset, SEEK_SET);
-
-        // Read file data
-        size_t readCount = fread(fileData, sizeof(uint8_t), nodeFileSize, file);
-        if (readCount != nodeFileSize)
-        {
+    
+        fseek(file, nodeOffset, SEEK_SET);
+        size_t readCount = fread(fileData, sizeof(uint8_t), nodeReadSize, file);
+        if (readCount != nodeReadSize) {
             free(fileData);
             fclose(file);
             throw std::runtime_error("[FileIO] Cannot read file content");
         }
-
-        // Cleanuo
+    
         fclose(file);
-
         cpuTimer.end();
         cpuTimer.printResult("Load data from file");
-
-        return FileData(fileData, nodeFileSize);
+    
+        return FileData(fileData, nodeReadSize);
     }
+        
     FileData loadFile(const char *path)
     {
         Timers::CpuTimer cpuTimer;
