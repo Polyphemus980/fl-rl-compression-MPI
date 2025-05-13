@@ -104,9 +104,11 @@ void compress(ArgsParser::Method method, const char *input, const char *output)
         switch (method)
         {
         case ArgsParser::Method::FixedLengthMPI:
+            printf("[INFO] MPI NODES COUNT: %d\n", data.nodesCount);
             compressed = FixedLength::gpuMPICompress(content.data, content.size, data);
             if (data.rank == 0)
             {
+                printf("[INFO] before saving from node %d\n", data.rank);
                 FileIO::saveCompressedFL(output, compressed);
                 skip = true;
             }
