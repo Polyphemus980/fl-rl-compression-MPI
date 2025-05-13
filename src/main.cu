@@ -71,7 +71,7 @@ MpiNcclData initMPINCCL()
 void compress(ArgsParser::Method method, const char *input, const char *output)
 {
     FileIO::FileData content;
-    MpiData data;
+    MpiData data,data2;
     MpiNcclData ncclData;
     try
     {
@@ -83,11 +83,8 @@ void compress(ArgsParser::Method method, const char *input, const char *output)
             break;
         case ArgsParser::Method::FixedLengthNVCC:
             ncclData = initMPINCCL();
-            MpiData data;
-            data.rank = ncclData.rank;
-            data.nodesCount = ncclData.nodesCount;
-            content = FileIO::loadFileMpi(input, data);
-            std::cout << "SIGMA HERE WAS (LION)\n";
+            data2 = MpiData(ncclData.rank, ncclData.nodesCount);
+            content = FileIO::loadFileMpi(input, data2);
             break;
         default:
             content = FileIO::loadFile(input);
