@@ -90,11 +90,11 @@ namespace FixedLength
 
         // Gather metadata using MPI since NCCL doesn't handle variable-sized data well
         MPI_Allgather(&compressedData.bitsSize, 1, MPI_UNSIGNED_LONG,
-                      all_bitsSizes, 1, MPI_UNSIGNED_LONG, MPI_COMM_WORLD);
+                    all_bitsSizes, 1, MPI_UNSIGNED_LONG, MPI_COMM_WORLD);
         MPI_Allgather(&compressedData.valuesSize, 1, MPI_UNSIGNED_LONG,
-                      all_valuesSizes, 1, MPI_UNSIGNED_LONG, MPI_COMM_WORLD);
+                    all_valuesSizes, 1, MPI_UNSIGNED_LONG, MPI_COMM_WORLD);
         MPI_Allgather(&compressedData.inputSize, 1, MPI_UNSIGNED_LONG,
-                      all_inputSizes, 1, MPI_UNSIGNED_LONG, MPI_COMM_WORLD);
+                    all_inputSizes, 1, MPI_UNSIGNED_LONG, MPI_COMM_WORLD);
 
         // Calculate total sizes
         size_t total_bitsSize = 0;
@@ -148,11 +148,11 @@ namespace FixedLength
             if (compressedData.bitsSize > 0)
             {
                 CHECK_CUDA(cudaMemcpy(d_padded_bits, compressedData.d_outputBits,
-                                      compressedData.bitsSize, cudaMemcpyDeviceToDevice));
+                                    compressedData.bitsSize, cudaMemcpyDeviceToDevice));
             }
 
             ncclAllGather(d_padded_bits, d_temp_bits, max_bitsSize,
-                          ncclUint8, comm, nullptr);
+                        ncclUint8, comm, nullptr);
 
             CHECK_CUDA(cudaFree(d_padded_bits));
         }
@@ -168,54 +168,67 @@ namespace FixedLength
             if (compressedData.valuesSize > 0)
             {
                 CHECK_CUDA(cudaMemcpy(d_padded_values, compressedData.d_outputValues,
-                                      compressedData.valuesSize, cudaMemcpyDeviceToDevice));
+                                    compressedData.valuesSize, cudaMemcpyDeviceToDevice));
             }
 
             ncclAllGather(d_padded_values, d_temp_values, max_valuesSize,
-                          ncclUint8, comm, nullptr);
+                        ncclUint8, comm, nullptr);
 
             CHECK_CUDA(cudaFree(d_padded_values));
         }
 
-        // Allocate memory for the merged data (without padding)
-        uint8_t *d_mergedBits = nullptr;
-        uint8_t *d_mergedValues = nullptr;
+        // Ensure all NCCL operations are complete
+        CHECK_CUDA(cudaDeviceSynchronize());
 
-        if (total_bitsSize > 0)
+        // Only rank 0 will process the merged data
+        FLCompressed result;
+        
+        if (rank == 0)
         {
-            CHECK_CUDA(cudaMalloc(&d_mergedBits, total_bitsSize));
-        }
+            // Allocate memory for the merged data (without padding)
+            uint8_t *d_mergedBits = nullptr;
+            uint8_t *d_mergedValues = nullptr;
 
-        if (total_valuesSize > 0)
-        {
-            CHECK_CUDA(cudaMalloc(&d_mergedValues, total_valuesSize));
-        }
-
-        // Copy from the temporary padded buffers to the final unpadded merged buffers
-        size_t bits_offset = 0;
-        size_t values_offset = 0;
-
-        for (int i = 0; i < nodesCount; i++)
-        {
-            if (all_bitsSizes[i] > 0)
+            if (total_bitsSize > 0)
             {
-                CHECK_CUDA(cudaMemcpy(d_mergedBits + bits_offset,
-                                      d_temp_bits + (i * max_bitsSize),
-                                      all_bitsSizes[i], cudaMemcpyDeviceToDevice));
-                bits_offset += all_bitsSizes[i];
+                CHECK_CUDA(cudaMalloc(&d_mergedBits, total_bitsSize));
             }
 
-            if (all_valuesSizes[i] > 0)
+            if (total_valuesSize > 0)
             {
-                CHECK_CUDA(cudaMemcpy(d_mergedValues + values_offset,
-                                      d_temp_values + (i * max_valuesSize),
-                                      all_valuesSizes[i], cudaMemcpyDeviceToDevice));
-                values_offset += all_valuesSizes[i];
+                CHECK_CUDA(cudaMalloc(&d_mergedValues, total_valuesSize));
             }
-        }
 
-        cpuTimer.end();
-        cpuTimer.printResult("NCCL gather compressed data from all nodes");
+            // Copy from the temporary padded buffers to the final unpadded merged buffers
+            size_t bits_offset = 0;
+            size_t values_offset = 0;
+
+            for (int i = 0; i < nodesCount; i++)
+            {
+                if (all_bitsSizes[i] > 0)
+                {
+                    CHECK_CUDA(cudaMemcpy(d_mergedBits + bits_offset,
+                                        d_temp_bits + (i * max_bitsSize),
+                                        all_bitsSizes[i], cudaMemcpyDeviceToDevice));
+                    bits_offset += all_bitsSizes[i];
+                }
+
+                if (all_valuesSizes[i] > 0)
+                {
+                    CHECK_CUDA(cudaMemcpy(d_mergedValues + values_offset,
+                                        d_temp_values + (i * max_valuesSize),
+                                        all_valuesSizes[i], cudaMemcpyDeviceToDevice));
+                    values_offset += all_valuesSizes[i];
+                }
+            }
+
+            cpuTimer.end();
+            cpuTimer.printResult("NCCL gather compressed data from all nodes");
+
+            // Create the merged compressed data
+            auto merged = FLCompressedDevice(d_mergedBits, total_bitsSize, d_mergedValues, total_valuesSize, total_inputSize);
+            result = DeviceToHost(merged);
+        }
 
         // Clean up
         if (d_temp_bits)
@@ -223,30 +236,30 @@ namespace FixedLength
         if (d_temp_values)
             CHECK_CUDA(cudaFree(d_temp_values));
 
-        delete[] all_bitsSizes;
-        delete[] all_valuesSizes;
-        delete[] all_inputSizes;
-
-        // Free the original compressed data if different
-        if (compressedData.d_outputBits && compressedData.d_outputBits != d_mergedBits)
+        // Free the original compressed data on device
+        if (compressedData.d_outputBits)
         {
             CHECK_CUDA(cudaFree(compressedData.d_outputBits));
         }
-        if (compressedData.d_outputValues && compressedData.d_outputValues != d_mergedValues)
+        if (compressedData.d_outputValues)
         {
             CHECK_CUDA(cudaFree(compressedData.d_outputValues));
         }
 
+        delete[] all_bitsSizes;
+        delete[] all_valuesSizes;
+        delete[] all_inputSizes;
+
+        // Finalize MPI for all processes
+        MPI_Finalize();
+        
+        // Non-root processes exit after cleanup
         if (rank != 0)
         {
-            MPI_Finalize();
             exit(0);
         }
 
-        // Return the merged compressed data
-        auto merged = FLCompressedDevice(d_mergedBits, total_bitsSize, d_mergedValues, total_valuesSize, total_inputSize);
-        MPI_Finalize();
-        return DeviceToHost(merged);
+        return result;
     }
 
     // Main functions
