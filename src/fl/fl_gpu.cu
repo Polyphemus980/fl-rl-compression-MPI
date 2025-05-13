@@ -65,7 +65,6 @@ namespace FixedLength
             FixedLength::FLCompressed::SendFLCompressed(compressedData, 0, 0, MPI_COMM_WORLD);
             cpuTimer.end();
             cpuTimer.printResult("Send compressed data to node 0");
-            MPI_Finalize();
             exit(0);
         }
     }
@@ -324,14 +323,14 @@ namespace FixedLength
             result = FLCompressed(nullptr, 0, nullptr, 0, 0);
         }
         
-        // Finalize MPI for all processes
-        MPI_Finalize();
-        
         // Non-root processes exit after cleanup
         if (rank != 0)
         {
             exit(0);
         }
+
+        // Finalize MPI for all processes
+        MPI_Finalize();
 
         return result;
     }
