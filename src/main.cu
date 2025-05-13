@@ -84,7 +84,6 @@ void compress(ArgsParser::Method method, const char *input, const char *output)
         case ArgsParser::Method::FixedLengthNVCC:
             ncclData = initMPINCCL();
             content = FileIO::loadFileNccl(input, ncclData);
-            std::cout << "SIGMA HERE WAS (LION)\n";
             break;
         default:
             content = FileIO::loadFile(input);
@@ -99,23 +98,40 @@ void compress(ArgsParser::Method method, const char *input, const char *output)
 
     // Fixed length
     FixedLength::FLCompressed compressed;
+    bool skip = false;
     try
     {
         switch (method)
         {
         case ArgsParser::Method::FixedLengthMPI:
             compressed = FixedLength::gpuMPICompress(content.data, content.size, data);
+            if (data.rank == 0)
+            {
+                FileIO::saveCompressedFL(output, compressed);
+                skip = true;
+            }
+            MPI_Finalize();
             break;
         case ArgsParser::Method::FixedLength:
             compressed = FixedLength::gpuCompress(content.data, content.size);
             break;
         case ArgsParser::Method::FixedLengthNVCC:
             compressed = FixedLength::gpuNCCLCompress(content.data, content.size, ncclData);
+            if (ncclData.rank == 0)
+            {
+                FileIO::saveCompressedFL(output, compressed);
+                skip = true;
+            }
+            MPI_Finalize();
+            break;
         default:
             compressed = FixedLength::cpuCompress(content.data, content.size);
             break;
         }
-        FileIO::saveCompressedFL(output, compressed);
+        if (!skip)
+        {
+            FileIO::saveCompressedFL(output, compressed);
+        }
     }
     catch (const std::exception &e)
     {
