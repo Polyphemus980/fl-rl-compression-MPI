@@ -82,6 +82,10 @@ namespace FixedLength
         // Compress data on this GPU
         FLCompressedDevice compressedData = gpuCompressDevice(data, size);
 
+        printf("[Rank %d]: Local compression - bitsSize: %zu, valuesSize: %zu, inputSize: %zu\n", 
+            rank, compressedData.bitsSize, compressedData.valuesSize, compressedData.inputSize);
+ 
+
         // We need to share metadata across all processes first
         // Create arrays to store metadata from all ranks
         size_t *all_bitsSizes = new size_t[nodesCount];
@@ -96,6 +100,10 @@ namespace FixedLength
         MPI_Allgather(&compressedData.inputSize, 1, MPI_UNSIGNED_LONG,
                       all_inputSizes, 1, MPI_UNSIGNED_LONG, MPI_COMM_WORLD);
 
+        printf("Rank %d: Local compression - bitsSize: %zu, valuesSize: %zu, inputSize: %zu\n", 
+                rank, compressedData.bitsSize, compressedData.valuesSize, compressedData.inputSize);
+             
+
         // Calculate total sizes
         size_t total_bitsSize = 0;
         size_t total_valuesSize = 0;
@@ -108,6 +116,11 @@ namespace FixedLength
             total_inputSize += all_inputSizes[i];
         }
 
+        if (rank == 0) {
+            printf("Total sizes - bits: %zu, values: %zu, input: %zu\n", 
+                   total_bitsSize, total_valuesSize, total_inputSize);
+        }    
+
         // Find the maximum sizes for each buffer (for fixed-size communication)
         size_t max_bitsSize = 0;
         size_t max_valuesSize = 0;
@@ -117,6 +130,11 @@ namespace FixedLength
             max_bitsSize = std::max(max_bitsSize, all_bitsSizes[i]);
             max_valuesSize = std::max(max_valuesSize, all_valuesSizes[i]);
         }
+
+        if (rank == 0) {
+            printf("Max sizes - bits: %zu, values: %zu\n", max_bitsSize, max_valuesSize);
+        }
+    
 
         // Allocate temporary buffers of the maximum size for gathering
         uint8_t *d_temp_bits = nullptr;
@@ -202,6 +220,8 @@ namespace FixedLength
                 CHECK_CUDA(cudaMemcpy(d_mergedBits + bits_offset,
                                       d_temp_bits + (i * max_bitsSize),
                                       all_bitsSizes[i], cudaMemcpyDeviceToDevice));
+                printf("Copying bits from rank %d: offset=%zu, size=%zu\n", 
+                        i, bits_offset, all_bitsSizes[i]);
                 bits_offset += all_bitsSizes[i];
             }
 
@@ -210,12 +230,17 @@ namespace FixedLength
                 CHECK_CUDA(cudaMemcpy(d_mergedValues + values_offset,
                                       d_temp_values + (i * max_valuesSize),
                                       all_valuesSizes[i], cudaMemcpyDeviceToDevice));
+                printf("Copying values from rank %d: offset=%zu, size=%zu\n", 
+                        i, values_offset, all_valuesSizes[i]);
                 values_offset += all_valuesSizes[i];
             }
         }
 
         cpuTimer.end();
         cpuTimer.printResult("NCCL gather compressed data from all nodes");
+
+        printf("Final offsets - bits: %zu (total: %zu), values: %zu (total: %zu)\n", 
+               bits_offset, total_bitsSize, values_offset, total_valuesSize);
 
         // Clean up
         if (d_temp_bits)
@@ -246,7 +271,13 @@ namespace FixedLength
         // Return the merged compressed data
         auto merged = FLCompressedDevice(d_mergedBits, total_bitsSize, d_mergedValues, total_valuesSize, total_inputSize);
         MPI_Finalize();
-        return DeviceToHost(merged);
+
+        auto result = DeviceToHost(merged);
+
+        printf("Final result - bitsSize: %zu, valuesSize: %zu, inputSize: %zu\n", 
+            result.bitsSize, result.valuesSize, result.inputSize);
+
+        return result;
     }
 
     // Main functions
