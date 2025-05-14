@@ -39,27 +39,14 @@ namespace FileIO
         fseek(file, 0, SEEK_END);
         size_t fileSize = ftell(file);
         fseek(file, 0, SEEK_SET);
-    
-        // Compute basic chunk sizes
-        size_t baseChunk = fileSize / mpiData.nodesCount;
-        size_t remainder = fileSize % mpiData.nodesCount;
-    
-        // Calculate actual start and size for this node
-        size_t nodeStart = mpiData.rank * baseChunk + std::min(static_cast<size_t>(mpiData.rank), remainder);
-        size_t nodeSize = baseChunk + (mpiData.rank < remainder ? 1 : 0);
-    
-        // Round up to 128-byte alignment (for processing purposes)
-        constexpr size_t ALIGNMENT = 128;
-        size_t alignedNodeSize = (nodeSize + ALIGNMENT - 1) / ALIGNMENT * ALIGNMENT;
-    
-        // Allocate aligned buffer and zero out padding area
-        uint8_t* fileData = reinterpret_cast<uint8_t*>(malloc(alignedNodeSize));
-        if (fileData == nullptr) {
-            fclose(file);
-            throw std::runtime_error("[FileIO] Cannot allocate memory");
-        }
-        memset(fileData, 0, alignedNodeSize);  // Zero padding
-    
+
+        int dataPerNodeSize = (size / (128 * nodesSize)) * 128;
+
+        int lastNodeData = size - (nodesSize - 1) * dataPerNodeSize;
+
+        int nodeSize = (mpiData.rank == nodesSize - 1) ? lastNodeData : dataPerNodeSize;
+        int nodeStart = mpiData.rank * dataPerNodeSize;
+
         // Read only the real file content
         fseek(file, nodeStart, SEEK_SET);
         size_t readCount = fread(fileData, sizeof(uint8_t), nodeSize, file);
