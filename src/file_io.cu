@@ -57,6 +57,8 @@ namespace FileIO
             fclose(file);
             throw std::runtime_error("[FileIO] Cannot read file content");
         }
+
+        fprintf("[Rank %d] Loaded %d bytes startin from offset %d\n", mpiData.rank, nodeSize, nodeStart);
     
         fclose(file);
         cpuTimer.end();
