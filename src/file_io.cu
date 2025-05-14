@@ -34,19 +34,21 @@ namespace FileIO
         if (file == nullptr) {
             throw std::runtime_error("[FileIO] Cannot open file");
         }
-    
+        size_t nodesSize = mpiData.nodesCount;
+
         // Get file size
         fseek(file, 0, SEEK_END);
         size_t fileSize = ftell(file);
         fseek(file, 0, SEEK_SET);
 
-        int dataPerNodeSize = (size / (128 * nodesSize)) * 128;
+        int dataPerNodeSize = (fileSize / (128 * nodesSize)) * 128;
 
-        int lastNodeData = size - (nodesSize - 1) * dataPerNodeSize;
+        int lastNodeData = fileSize - (nodesSize - 1) * dataPerNodeSize;
 
         int nodeSize = (mpiData.rank == nodesSize - 1) ? lastNodeData : dataPerNodeSize;
         int nodeStart = mpiData.rank * dataPerNodeSize;
-
+        
+         uint8_t *fileData = reinterpret_cast<uint8_t *>(malloc(sizeof(uint8_t) * fileSize));
         // Read only the real file content
         fseek(file, nodeStart, SEEK_SET);
         size_t readCount = fread(fileData, sizeof(uint8_t), nodeSize, file);
@@ -60,7 +62,7 @@ namespace FileIO
         cpuTimer.end();
         cpuTimer.printResult("Load data from file");
     
-        return FileData(fileData, alignedNodeSize);
+        return FileData(fileData, nodeSize);
     }
                 
     FileData loadFile(const char *path)
