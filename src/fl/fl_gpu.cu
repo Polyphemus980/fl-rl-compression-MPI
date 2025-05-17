@@ -100,9 +100,6 @@ namespace FixedLength
         MPI_Allgather(&compressedData.inputSize, 1, MPI_UNSIGNED_LONG,
                       all_inputSizes, 1, MPI_UNSIGNED_LONG, MPI_COMM_WORLD);
 
-        printf("Rank %d: Local compression - bitsSize: %zu, valuesSize: %zu, inputSize: %zu\n", 
-                rank, compressedData.bitsSize, compressedData.valuesSize, compressedData.inputSize);
-             
 
         // Calculate total sizes
         size_t total_bitsSize = 0;
@@ -135,7 +132,6 @@ namespace FixedLength
             printf("Max sizes - bits: %zu, values: %zu\n", max_bitsSize, max_valuesSize);
         }
     
-
         // Allocate temporary buffers of the maximum size for gathering
         uint8_t *d_temp_bits = nullptr;
         uint8_t *d_temp_values = nullptr;
