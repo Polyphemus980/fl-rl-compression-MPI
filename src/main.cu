@@ -10,6 +10,7 @@
 #include "./fl/fl_cpu.cuh"
 #include "./fl/fl_gpu.cuh"
 #include "./fl/mpi_common.cuh"
+#include "utils.cuh"
 
 void compress(ArgsParser::Method method, const char *input, const char *output);
 void decompress(ArgsParser::Method method, const char *input, const char *output);
@@ -62,7 +63,7 @@ MpiNcclData initMPINCCL()
     MPI_Bcast(&id, sizeof(id), MPI_BYTE, 0, MPI_COMM_WORLD);
 
     ncclComm_t comm;
-    ncclCommInitRank(&comm, nodesCount, id, rank);
+    NCCLCHECK(ncclCommInitRank(&comm, nodesCount, id, rank));
 
     printf("[INFO] Rank %d using device %d\n", rank, device);
     return MpiNcclData(rank, nodesCount, device, comm);
@@ -71,7 +72,7 @@ MpiNcclData initMPINCCL()
 void compress(ArgsParser::Method method, const char *input, const char *output)
 {
     FileIO::FileData content;
-    MpiData data,data2;
+    MpiData data, data2;
     MpiNcclData ncclData;
     try
     {
@@ -111,6 +112,7 @@ void compress(ArgsParser::Method method, const char *input, const char *output)
             break;
         case ArgsParser::Method::FixedLengthNVCC:
             compressed = FixedLength::gpuNCCLCompress(content.data, content.size, ncclData);
+            break;
         default:
             compressed = FixedLength::cpuCompress(content.data, content.size);
             break;

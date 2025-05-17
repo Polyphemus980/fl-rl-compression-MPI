@@ -25,13 +25,15 @@ namespace FileIO
         size = flDecompressed.size;
     }
 
-    FileData loadFileMpi(const char* path, MpiData mpiData) {
+    FileData loadFileMpi(const char *path, MpiData mpiData)
+    {
         Timers::CpuTimer cpuTimer;
         cpuTimer.start();
-    
+
         // Open file
-        FILE* file = fopen(path, "rb");
-        if (file == nullptr) {
+        FILE *file = fopen(path, "rb");
+        if (file == nullptr)
+        {
             throw std::runtime_error("[FileIO] Cannot open file");
         }
         size_t nodesSize = mpiData.nodesCount;
@@ -47,26 +49,27 @@ namespace FileIO
 
         int nodeSize = (mpiData.rank == nodesSize - 1) ? lastNodeData : dataPerNodeSize;
         int nodeStart = mpiData.rank * dataPerNodeSize;
-        
-         uint8_t *fileData = reinterpret_cast<uint8_t *>(malloc(sizeof(uint8_t) * nodeSize));
+
+        uint8_t *fileData = reinterpret_cast<uint8_t *>(malloc(sizeof(uint8_t) * nodeSize));
         // Read only the real file content
         fseek(file, nodeStart, SEEK_SET);
         size_t readCount = fread(fileData, sizeof(uint8_t), nodeSize, file);
-        if (readCount != nodeSize) {
+        if (readCount != nodeSize)
+        {
             free(fileData);
             fclose(file);
             throw std::runtime_error("[FileIO] Cannot read file content");
         }
 
         printf("[Rank %d] Loaded %d bytes startin from offset %d\n", mpiData.rank, nodeSize, nodeStart);
-    
+
         fclose(file);
         cpuTimer.end();
         cpuTimer.printResult("Load data from file");
-    
+
         return FileData(fileData, nodeSize);
     }
-                
+
     FileData loadFile(const char *path)
     {
         Timers::CpuTimer cpuTimer;
@@ -223,6 +226,7 @@ namespace FileIO
         cpuTimer.start();
 
         // Open file
+        printf("Saving compressed data to file: %s\n", path);
         FILE *file = fopen(path, "wb");
         if (file == nullptr)
         {
@@ -230,6 +234,7 @@ namespace FileIO
         }
 
         // Save input size
+        printf("input size %d \n", flCompressed.inputSize);
         size_t writeCount = fwrite(&flCompressed.inputSize, sizeof(size_t), 1, file);
         if (writeCount != 1)
         {
@@ -238,7 +243,9 @@ namespace FileIO
         }
 
         // Save bits size
+        printf("bits size: %d\n", flCompressed.bitsSize);
         writeCount = fwrite(&flCompressed.bitsSize, sizeof(size_t), 1, file);
+        printf("Write count for bits: %d\n", writeCount);
         if (writeCount != 1)
         {
             fclose(file);
@@ -251,10 +258,11 @@ namespace FileIO
         {
             fclose(file);
             throw std::runtime_error("[FileIO] Cannot write to file");
-        }
-
+        }   
+            
         // Save bits array
         writeCount = fwrite(flCompressed.outputBits, sizeof(uint8_t), flCompressed.bitsSize, file);
+        printf("Write count for outpu t bits: %d\n", writeCount);
         if (writeCount != flCompressed.bitsSize)
         {
             fclose(file);
@@ -263,10 +271,18 @@ namespace FileIO
 
         // Save values array
         writeCount = fwrite(flCompressed.outputValues, sizeof(uint8_t), flCompressed.valuesSize, file);
+        printf("Write count for values: %d\n", writeCount);
         if (writeCount != flCompressed.valuesSize)
         {
             fclose(file);
             throw std::runtime_error("[FileIO] Cannot write to file");
+        }
+
+        // Print last 10 values:
+        printf("Last 10 values: ");
+        for (int i = 0; i < 10; i++)
+        {
+            printf("[byte %d]: %d \n", flCompressed.valuesSize - 10 + i, flCompressed.outputValues[flCompressed.valuesSize - 10 + i]);
         }
 
         // Cleanup

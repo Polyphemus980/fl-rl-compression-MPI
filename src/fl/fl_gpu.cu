@@ -73,25 +73,28 @@ namespace FixedLength
     FLCompressed gpuNCCLCompress(uint8_t *data, size_t size, MpiNcclData mpiNcclData)
     {
         Timers::CpuTimer cpuTimer;
-
+    
         // Get the rank and size from the provided MpiNcclData
         int rank = mpiNcclData.rank;
         int nodesCount = mpiNcclData.nodesCount;
         ncclComm_t comm = mpiNcclData.comm;
-
+        
+        // Create a dedicated CUDA stream for NCCL operations
+        cudaStream_t stream;
+        CHECK_CUDA(cudaStreamCreate(&stream));
+    
         // Compress data on this GPU
         FLCompressedDevice compressedData = gpuCompressDevice(data, size);
-
+    
         printf("[Rank %d]: Local compression - bitsSize: %zu, valuesSize: %zu, inputSize: %zu\n", 
             rank, compressedData.bitsSize, compressedData.valuesSize, compressedData.inputSize);
- 
-
+     
         // We need to share metadata across all processes first
         // Create arrays to store metadata from all ranks
         size_t *all_bitsSizes = new size_t[nodesCount];
         size_t *all_valuesSizes = new size_t[nodesCount];
         size_t *all_inputSizes = new size_t[nodesCount];
-
+    
         // Gather metadata using MPI since NCCL doesn't handle variable-sized data well
         MPI_Allgather(&compressedData.bitsSize, 1, MPI_UNSIGNED_LONG,
                       all_bitsSizes, 1, MPI_UNSIGNED_LONG, MPI_COMM_WORLD);
@@ -99,184 +102,253 @@ namespace FixedLength
                       all_valuesSizes, 1, MPI_UNSIGNED_LONG, MPI_COMM_WORLD);
         MPI_Allgather(&compressedData.inputSize, 1, MPI_UNSIGNED_LONG,
                       all_inputSizes, 1, MPI_UNSIGNED_LONG, MPI_COMM_WORLD);
-
-
+    
+        // Add barrier to ensure all MPI operations are complete
+        MPI_Barrier(MPI_COMM_WORLD);
+    
         // Calculate total sizes
         size_t total_bitsSize = 0;
         size_t total_valuesSize = 0;
         size_t total_inputSize = 0;
-
+    
         for (int i = 0; i < nodesCount; i++)
         {
             total_bitsSize += all_bitsSizes[i];
             total_valuesSize += all_valuesSizes[i];
             total_inputSize += all_inputSizes[i];
         }
-
+    
         if (rank == 0) {
             printf("Total sizes - bits: %zu, values: %zu, input: %zu\n", 
                    total_bitsSize, total_valuesSize, total_inputSize);
         }    
-
+    
         // Find the maximum sizes for each buffer (for fixed-size communication)
         size_t max_bitsSize = 0;
         size_t max_valuesSize = 0;
-
+    
         for (int i = 0; i < nodesCount; i++)
         {
             max_bitsSize = std::max(max_bitsSize, all_bitsSizes[i]);
             max_valuesSize = std::max(max_valuesSize, all_valuesSizes[i]);
         }
-
+    
         if (rank == 0) {
             printf("Max sizes - bits: %zu, values: %zu\n", max_bitsSize, max_valuesSize);
         }
     
-        // Allocate temporary buffers of the maximum size for gathering
-        uint8_t *d_temp_bits = nullptr;
-        uint8_t *d_temp_values = nullptr;
-
-        if (max_bitsSize > 0)
-        {
-            CHECK_CUDA(cudaMalloc(&d_temp_bits, max_bitsSize * nodesCount));
-            CHECK_CUDA(cudaMemset(d_temp_bits, 0, max_bitsSize * nodesCount));
+        // Important: Store send buffers in host variables to prevent them from going out of scope
+        // This is important as NCCL operations are asynchronous
+        uint8_t *d_send_bits = nullptr;
+        uint8_t *d_send_values = nullptr;
+        
+        // Allocate device memory for receiving all data
+        uint8_t *d_recv_bits = nullptr;
+        uint8_t *d_recv_values = nullptr;
+        
+        // Allocate and initialize send buffers (with padding if necessary)
+        if (max_bitsSize > 0) {
+            CHECK_CUDA(cudaMalloc(&d_send_bits, max_bitsSize));
+            CHECK_CUDA(cudaMemset(d_send_bits, 0, max_bitsSize));
+            
+            if (compressedData.bitsSize > 0) {
+                CHECK_CUDA(cudaMemcpyAsync(d_send_bits, compressedData.d_outputBits,
+                                      compressedData.bitsSize, cudaMemcpyDeviceToDevice, stream));
+            }
+            
+            // Allocate receive buffer
+            CHECK_CUDA(cudaMalloc(&d_recv_bits, max_bitsSize * nodesCount));
+            CHECK_CUDA(cudaMemset(d_recv_bits, 0, max_bitsSize * nodesCount));
         }
-
-        if (max_valuesSize > 0)
-        {
-            CHECK_CUDA(cudaMalloc(&d_temp_values, max_valuesSize * nodesCount));
-            CHECK_CUDA(cudaMemset(d_temp_values, 0, max_valuesSize * nodesCount));
+        
+        if (max_valuesSize > 0) {
+            CHECK_CUDA(cudaMalloc(&d_send_values, max_valuesSize));
+            CHECK_CUDA(cudaMemset(d_send_values, 0, max_valuesSize));
+            
+            if (compressedData.valuesSize > 0) {
+                CHECK_CUDA(cudaMemcpyAsync(d_send_values, compressedData.d_outputValues,
+                                      compressedData.valuesSize, cudaMemcpyDeviceToDevice, stream));
+            }
+            
+            // Verify send buffer contains data
+            uint8_t *h_check = new uint8_t[std::min(10UL, compressedData.valuesSize)];
+            CHECK_CUDA(cudaMemcpy(h_check, d_send_values, 
+                                 std::min(10UL, compressedData.valuesSize), cudaMemcpyDeviceToHost));
+            printf("[Rank %d]: First few bytes of send_values: ", rank);
+            for (size_t i = 0; i < std::min(10UL, compressedData.valuesSize); i++) {
+                printf("%02x ", h_check[i]);
+            }
+            printf("\n");
+            delete[] h_check;
+            
+            // Allocate receive buffer
+            CHECK_CUDA(cudaMalloc(&d_recv_values, max_valuesSize * nodesCount));
+            CHECK_CUDA(cudaMemset(d_recv_values, 0, max_valuesSize * nodesCount));
         }
-
-        // Gather all data using NCCL
+        
+        // Synchronize stream to ensure all memory operations are complete
+        CHECK_CUDA(cudaStreamSynchronize(stream));
+        
+        // NCCL operations
         cpuTimer.start();
-
+        
+        // Create a new NCCL group for this operation
+        ncclGroupStart();
+        
         // AllGather for bits
-        if (max_bitsSize > 0)
-        {
-            // Ensure all processes use the same size buffer, padded with zeros if necessary
-            uint8_t *d_padded_bits = nullptr;
-            CHECK_CUDA(cudaMalloc(&d_padded_bits, max_bitsSize));
-            CHECK_CUDA(cudaMemset(d_padded_bits, 0, max_bitsSize));
-
-            if (compressedData.bitsSize > 0)
-            {
-                CHECK_CUDA(cudaMemcpy(d_padded_bits, compressedData.d_outputBits,
-                                      compressedData.bitsSize, cudaMemcpyDeviceToDevice));
-            }
-
-            ncclAllGather(d_padded_bits, d_temp_bits, max_bitsSize,
-                          ncclUint8, comm, nullptr);
-
-            CHECK_CUDA(cudaFree(d_padded_bits));
+        if (max_bitsSize > 0) {
+            NCCLCHECK(ncclAllGather(d_send_bits, d_recv_bits, max_bitsSize, ncclUint8, comm, stream));
         }
-
-        // AllGather for values
-        if (max_valuesSize > 0)
-        {
-            // Ensure all processes use the same size buffer, padded with zeros if necessary
-            uint8_t *d_padded_values = nullptr;
-            CHECK_CUDA(cudaMalloc(&d_padded_values, max_valuesSize));
-            CHECK_CUDA(cudaMemset(d_padded_values, 0, max_valuesSize));
-
-            if (compressedData.valuesSize > 0)
-            {
-                CHECK_CUDA(cudaMemcpy(d_padded_values, compressedData.d_outputValues,
-                                      compressedData.valuesSize, cudaMemcpyDeviceToDevice));
-            }
-
-            ncclAllGather(d_padded_values, d_temp_values, max_valuesSize,
-                          ncclUint8, comm, nullptr);
-
-            CHECK_CUDA(cudaFree(d_padded_values));
+        
+        // AllGather for values 
+        if (max_valuesSize > 0) {
+            NCCLCHECK(ncclAllGather(d_send_values, d_recv_values, max_valuesSize, ncclUint8, comm, stream));
         }
-
+        
+        // End the NCCL group
+        ncclGroupEnd();
+        
+        // Synchronize stream to ensure NCCL operations are complete
+        CHECK_CUDA(cudaStreamSynchronize(stream));
+        
+        // Verify that receive buffers contain data
+        if (rank == 0 && max_valuesSize > 0) {
+            uint8_t *h_check = new uint8_t[std::min(20UL, max_valuesSize * nodesCount)];
+            CHECK_CUDA(cudaMemcpy(h_check, d_recv_values, 
+                                 std::min(20UL, max_valuesSize * nodesCount), cudaMemcpyDeviceToHost));
+            printf("[Rank %d]: First few bytes of recv_values after AllGather: ", rank);
+            for (size_t i = 0; i < std::min(20UL, max_valuesSize * nodesCount); i++) {
+                printf("%02x ", h_check[i]);
+            }
+            printf("\n");
+            delete[] h_check;
+            
+            // Check specific locations for each rank's data
+            for (int i = 0; i < nodesCount; i++) {
+                if (all_valuesSizes[i] > 0) {
+                    uint8_t *h_check_rank = new uint8_t[std::min(10UL, all_valuesSizes[i])];
+                    CHECK_CUDA(cudaMemcpy(h_check_rank, d_recv_values + (i * max_valuesSize), 
+                                         std::min(10UL, all_valuesSizes[i]), cudaMemcpyDeviceToHost));
+                    printf("[Rank %d]: First few bytes from rank %d in recv_values: ", rank, i);
+                    for (size_t j = 0; j < std::min(10UL, all_valuesSizes[i]); j++) {
+                        printf("%02x ", h_check_rank[j]);
+                    }
+                    printf("\n");
+                    delete[] h_check_rank;
+                }
+            }
+        }
+        
         // Allocate memory for the merged data (without padding)
         uint8_t *d_mergedBits = nullptr;
         uint8_t *d_mergedValues = nullptr;
-
+    
         if (total_bitsSize > 0)
         {
             CHECK_CUDA(cudaMalloc(&d_mergedBits, total_bitsSize));
         }
-
+    
         if (total_valuesSize > 0)
         {
             CHECK_CUDA(cudaMalloc(&d_mergedValues, total_valuesSize));
         }
-
-        // Copy from the temporary padded buffers to the final unpadded merged buffers
+    
+        // Copy from the padded buffers to the final unpadded merged buffers
         size_t bits_offset = 0;
         size_t values_offset = 0;
-
+    
         for (int i = 0; i < nodesCount; i++)
         {
             if (all_bitsSizes[i] > 0)
             {
-                CHECK_CUDA(cudaMemcpy(d_mergedBits + bits_offset,
-                                      d_temp_bits + (i * max_bitsSize),
-                                      all_bitsSizes[i], cudaMemcpyDeviceToDevice));
-                printf("Copying bits from rank %d: offset=%zu, size=%zu\n", 
-                        i, bits_offset, all_bitsSizes[i]);
+                CHECK_CUDA(cudaMemcpyAsync(d_mergedBits + bits_offset,
+                                      d_recv_bits + (i * max_bitsSize),
+                                      all_bitsSizes[i], cudaMemcpyDeviceToDevice, stream));
+                printf("[Rank %d]: Copying bits from rank %d: offset=%zu, size=%zu\n", 
+                        rank, i, bits_offset, all_bitsSizes[i]);
                 bits_offset += all_bitsSizes[i];
             }
-
+    
             if (all_valuesSizes[i] > 0)
             {
-                CHECK_CUDA(cudaMemcpy(d_mergedValues + values_offset,
-                                      d_temp_values + (i * max_valuesSize),
-                                      all_valuesSizes[i], cudaMemcpyDeviceToDevice));
-                printf("Copying values from rank %d: offset=%zu, size=%zu\n", 
-                        i, values_offset, all_valuesSizes[i]);
+                CHECK_CUDA(cudaMemcpyAsync(d_mergedValues + values_offset,
+                                      d_recv_values + (i * max_valuesSize),
+                                      all_valuesSizes[i], cudaMemcpyDeviceToDevice, stream));
+                printf("[Rank %d]: Copying values from rank %d: offset=%zu, size=%zu\n", 
+                        rank, i, values_offset, all_valuesSizes[i]);
                 values_offset += all_valuesSizes[i];
             }
         }
-
+        
+        // Synchronize to ensure all copies are complete
+        CHECK_CUDA(cudaStreamSynchronize(stream));
+        
+        // Verify final merged buffers
+        if (rank == 0 && total_valuesSize > 0) {
+            uint8_t *h_check = new uint8_t[std::min(20UL, total_valuesSize)];
+            CHECK_CUDA(cudaMemcpy(h_check, d_mergedValues, 
+                                 std::min(20UL, total_valuesSize), cudaMemcpyDeviceToHost));
+            printf("[Rank %d]: First few bytes of final merged values: ", rank);
+            for (size_t i = 0; i < std::min(20UL, total_valuesSize); i++) {
+                printf("%02x ", h_check[i]);
+            }
+            printf("\n");
+            delete[] h_check;
+        }
+    
         cpuTimer.end();
         cpuTimer.printResult("NCCL gather compressed data from all nodes");
-
-        printf("Final offsets - bits: %zu (total: %zu), values: %zu (total: %zu)\n", 
-               bits_offset, total_bitsSize, values_offset, total_valuesSize);
-
+    
+        printf("[Rank %d]: Final offsets - bits: %zu (total: %zu), values: %zu (total: %zu)\n", 
+               rank, bits_offset, total_bitsSize, values_offset, total_valuesSize);
+    
         // Clean up
-        if (d_temp_bits)
-            CHECK_CUDA(cudaFree(d_temp_bits));
-        if (d_temp_values)
-            CHECK_CUDA(cudaFree(d_temp_values));
-
+        if (d_send_bits) CHECK_CUDA(cudaFree(d_send_bits));
+        if (d_send_values) CHECK_CUDA(cudaFree(d_send_values));
+        if (d_recv_bits) CHECK_CUDA(cudaFree(d_recv_bits));
+        if (d_recv_values) CHECK_CUDA(cudaFree(d_recv_values));
+        
         delete[] all_bitsSizes;
         delete[] all_valuesSizes;
         delete[] all_inputSizes;
-
-        // Free the original compressed data if different
-        if (compressedData.d_outputBits && compressedData.d_outputBits != d_mergedBits)
+    
+        // Free the original compressed data
+        if (compressedData.d_outputBits)
         {
             CHECK_CUDA(cudaFree(compressedData.d_outputBits));
         }
-        if (compressedData.d_outputValues && compressedData.d_outputValues != d_mergedValues)
+        if (compressedData.d_outputValues)
         {
             CHECK_CUDA(cudaFree(compressedData.d_outputValues));
         }
-
+    
+        // Need to ensure all ranks finish their part before rank 0 finalizes MPI
+        MPI_Barrier(MPI_COMM_WORLD);
+    
         if (rank != 0)
         {
+            // Destroy stream before exiting
+            CHECK_CUDA(cudaStreamDestroy(stream));
+            
             MPI_Finalize();
             exit(0);
         }
-
-        // Return the merged compressed data
+    
+        // Return the merged compressed data (only for rank 0)
         auto merged = FLCompressedDevice(d_mergedBits, total_bitsSize, d_mergedValues, total_valuesSize, total_inputSize);
-        MPI_Finalize();
-
+        
         auto result = DeviceToHost(merged);
-
-        printf("Final result - bitsSize: %zu, valuesSize: %zu, inputSize: %zu\n", 
-            result.bitsSize, result.valuesSize, result.inputSize);
-
+    
+        printf("[Rank %d]: Final result - bitsSize: %zu, valuesSize: %zu, inputSize: %zu\n", 
+            rank, result.bitsSize, result.valuesSize, result.inputSize);
+    
+        // Destroy stream
+        CHECK_CUDA(cudaStreamDestroy(stream));
+    
+        MPI_Finalize();
         return result;
     }
-
-    // Main functions
+    
     FLCompressed gpuCompress(uint8_t *data, size_t size)
     {
         if (size == 0)
