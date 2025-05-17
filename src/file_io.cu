@@ -48,7 +48,7 @@ namespace FileIO
         int nodeSize = (mpiData.rank == nodesSize - 1) ? lastNodeData : dataPerNodeSize;
         int nodeStart = mpiData.rank * dataPerNodeSize;
         
-         uint8_t *fileData = reinterpret_cast<uint8_t *>(malloc(sizeof(uint8_t) * fileSize));
+         uint8_t *fileData = reinterpret_cast<uint8_t *>(malloc(sizeof(uint8_t) * nodeSize));
         // Read only the real file content
         fseek(file, nodeStart, SEEK_SET);
         size_t readCount = fread(fileData, sizeof(uint8_t), nodeSize, file);
