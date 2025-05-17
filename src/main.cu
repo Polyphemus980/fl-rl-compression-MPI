@@ -82,7 +82,7 @@ void compress(ArgsParser::Method method, const char *input, const char *output)
             data = initMPI();
             content = FileIO::loadFileMpi(input, data);
             break;
-        case ArgsParser::Method::FixedLengthNVCC:
+        case ArgsParser::Method::FixedLengthNCCL:
             ncclData = initMPINCCL();
             data2 = MpiData(ncclData.rank, ncclData.nodesCount);
             content = FileIO::loadFileMpi(input, data2);
@@ -110,7 +110,7 @@ void compress(ArgsParser::Method method, const char *input, const char *output)
         case ArgsParser::Method::FixedLength:
             compressed = FixedLength::gpuCompress(content.data, content.size);
             break;
-        case ArgsParser::Method::FixedLengthNVCC:
+        case ArgsParser::Method::FixedLengthNCCL:
             compressed = FixedLength::gpuNCCLCompress(content.data, content.size, ncclData);
             break;
         default:

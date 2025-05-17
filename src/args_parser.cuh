@@ -13,7 +13,7 @@ namespace ArgsParser
     {
         FixedLength,
         FixedLengthMPI,
-        FixedLengthNVCC,
+        FixedLengthNCCL,
         FixedLengthSHMEM,
         FixedLengthCPU,
     };

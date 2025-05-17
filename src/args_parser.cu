@@ -41,7 +41,7 @@ namespace ArgsParser
         }
         else if (strcmp(argv[2], "fl-nccl") == 0)
         {
-            m = Method::FixedLengthNVCC;
+            m = Method::FixedLengthNCCL;
         }
         else if (strcmp(argv[2], "fl-shmem") == 0)
         {
