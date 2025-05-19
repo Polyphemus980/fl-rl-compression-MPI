@@ -226,7 +226,6 @@ namespace FileIO
         cpuTimer.start();
 
         // Open file
-        printf("Saving compressed data to file: %s\n", path);
         FILE *file = fopen(path, "wb");
         if (file == nullptr)
         {
@@ -234,7 +233,6 @@ namespace FileIO
         }
 
         // Save input size
-        printf("input size %d \n", flCompressed.inputSize);
         size_t writeCount = fwrite(&flCompressed.inputSize, sizeof(size_t), 1, file);
         if (writeCount != 1)
         {
@@ -243,9 +241,7 @@ namespace FileIO
         }
 
         // Save bits size
-        printf("bits size: %d\n", flCompressed.bitsSize);
         writeCount = fwrite(&flCompressed.bitsSize, sizeof(size_t), 1, file);
-        printf("Write count for bits: %d\n", writeCount);
         if (writeCount != 1)
         {
             fclose(file);
@@ -262,7 +258,6 @@ namespace FileIO
             
         // Save bits array
         writeCount = fwrite(flCompressed.outputBits, sizeof(uint8_t), flCompressed.bitsSize, file);
-        printf("Write count for outpu t bits: %d\n", writeCount);
         if (writeCount != flCompressed.bitsSize)
         {
             fclose(file);
@@ -271,18 +266,10 @@ namespace FileIO
 
         // Save values array
         writeCount = fwrite(flCompressed.outputValues, sizeof(uint8_t), flCompressed.valuesSize, file);
-        printf("Write count for values: %d\n", writeCount);
         if (writeCount != flCompressed.valuesSize)
         {
             fclose(file);
             throw std::runtime_error("[FileIO] Cannot write to file");
-        }
-
-        // Print last 10 values:
-        printf("Last 10 values: ");
-        for (int i = 0; i < 10; i++)
-        {
-            printf("[byte %d]: %d \n", flCompressed.valuesSize - 10 + i, flCompressed.outputValues[flCompressed.valuesSize - 10 + i]);
         }
 
         // Cleanup
