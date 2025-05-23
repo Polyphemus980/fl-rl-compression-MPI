@@ -33,6 +33,11 @@ namespace FixedLength
             this->inputSize = inputSize;
         }
 
+        int GetSizeSentByMPI() const
+        {
+            return sizeof(size_t) * 3 + this->bitsSize + this->valuesSize;
+        }
+
         static int SendFLCompressed(const FLCompressed &data, int destination, int tag, MPI_Comm comm)
         {
             int rank;
