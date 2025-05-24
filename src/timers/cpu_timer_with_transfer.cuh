@@ -15,7 +15,7 @@ namespace Timers
         CpuTimerWithTransfer(int rank) : CpuTimer(rank) {}
         void startTransfer();
         void endTransfer();
-        void printTransferResult(const char *s);
+        void printResult(const char *s);
         void addTransferSize(uint64_t size)
         {
             this->_transferSize += size;

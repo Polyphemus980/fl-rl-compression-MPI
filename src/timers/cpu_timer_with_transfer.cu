@@ -13,7 +13,7 @@ namespace Timers
         this->end();
     }
 
-    void CpuTimerWithTransfer::printTransferResult(const char *s)
+    void CpuTimerWithTransfer::printResult(const char *s)
     {
         auto transferSpeed = this->_transferSize / (this->_timeInMS / 1000.0);
         auto unit = "B/s";
