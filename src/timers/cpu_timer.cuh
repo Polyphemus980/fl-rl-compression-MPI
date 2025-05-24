@@ -14,9 +14,9 @@ namespace Timers
     private:
         std::chrono::high_resolution_clock::time_point _start{};
         std::chrono::high_resolution_clock::time_point _end{};
-        int64_t _timeInMS{};
-
+        
     protected:
+        int64_t _timeInMS{};
         int rank = -1;
 
     public:
