@@ -27,7 +27,7 @@ endif()
 include_directories(${NCCL_INCLUDE_DIR})
 
 # Add executable
-add_executable(compress src/main.cu src/timers/cpu_timer.cu src/timers/gpu_timer.cu src/args_parser.cu src/fl/fl_cpu.cu src/fl/fl_gpu.cu src/file_io.cu)
+add_executable(compress src/main.cu src/timers/cpu_timer.cu src/timers/gpu_timer.cu src/args_parser.cu src/fl/fl_cpu.cu src/fl/fl_gpu.cu src/file_io.cu src/timers/cpu_timer_with_transfer.cu)
 
 # Link MPI and NCCL
 target_link_libraries(compress PRIVATE MPI::MPI_CXX ${NCCL_LIB})
