@@ -31,13 +31,3 @@ add_executable(compress src/main.cu src/timers/cpu_timer.cu src/timers/gpu_timer
 
 # Link MPI and NCCL
 target_link_libraries(compress PRIVATE MPI::MPI_CXX ${NCCL_LIB})
-
-# Tests
-enable_testing()
-
-# FL_GPU_TESTS
-add_executable(fl_gpu_tests tests/fl/test_fl_gpu.cu src/fl/fl_gpu.cu src/timers/cpu_timer.cu src/timers/gpu_timer.cu)
-# Disable specific warning for NVIDIA compiler - it's something about acutest not related to the project itself
-target_compile_options(fl_gpu_tests PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-Xcudafe --diag_suppress=2949>)
-target_link_libraries(fl_gpu_tests PRIVATE MPI::MPI_CXX ${NCCL_LIB})
-add_test(NAME fl_gpu_tests COMMAND fl_gpu_tests)

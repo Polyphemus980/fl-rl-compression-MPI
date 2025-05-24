@@ -1,5 +1,3 @@
-#include <string>
-
 #include "cpu_timer_with_transfer.cuh"
 
 namespace Timers
@@ -18,7 +16,7 @@ namespace Timers
     void CpuTimerWithTransfer::printResult(const char *s)
     {
         auto transferSpeed = this->_transferSize / (this->_timeInMS / 1000.0);
-        std::string unit("B/s");
+        const char *unit = "B/s";
         if (transferSpeed > 1024 * 1024 * 1024)
         {
             transferSpeed /= (1024 * 1024 * 1024);
@@ -38,6 +36,6 @@ namespace Timers
         {
             printf("[Rank: %d] ", this->rank);
         }
-        printf("[TIMER] Step: \"%s\", Transfer Speed: %ld [%s] \n", s, transferSpeed, unit);
+        printf("[TIMER] Step: \"%s\", Transfer Speed: %lf [%s] \n", s, transferSpeed, unit);
     }
 } // Timers
