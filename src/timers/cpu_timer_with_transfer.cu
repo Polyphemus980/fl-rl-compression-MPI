@@ -1,3 +1,5 @@
+#include <string>
+
 #include "cpu_timer_with_transfer.cuh"
 
 namespace Timers
@@ -16,7 +18,7 @@ namespace Timers
     void CpuTimerWithTransfer::printResult(const char *s)
     {
         auto transferSpeed = this->_transferSize / (this->_timeInMS / 1000.0);
-        auto unit = "B/s";
+        std::string unit("B/s");
         if (transferSpeed > 1024 * 1024 * 1024)
         {
             transferSpeed /= (1024 * 1024 * 1024);
