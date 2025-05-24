@@ -400,6 +400,7 @@ namespace FixedLength
         {
             error = e;
             isError = true;
+            std::cout << e.what() << std::endl;
         }
 
         gpuTimer.start();
@@ -621,6 +622,7 @@ namespace FixedLength
         {
             error = e;
             isError = true;
+            std::cout << e.what() << std::endl;
         }
 
         gpuTimer.start();
