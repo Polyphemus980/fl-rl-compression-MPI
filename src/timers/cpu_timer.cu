@@ -18,6 +18,11 @@ namespace Timers
 
     void CpuTimer::printResult(const char *s)
     {
+        if (this->rank != -1)
+        {
+            printf("[Rank: %d] ", this->rank);
+        }
+        else
         printf("[TIMER] Step: \"%s\", Time: %ld ms\n", s, this->_timeInMS);
     }
 } // Timers

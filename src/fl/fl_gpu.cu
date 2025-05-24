@@ -10,6 +10,7 @@
 #include "../utils.cuh"
 #include "../timers/cpu_timer.cuh"
 #include "../timers/gpu_timer.cuh"
+#include "../timers/cpu_timer_with_transfer.cuh"
 
 namespace FixedLength
 {
@@ -39,7 +40,7 @@ namespace FixedLength
 
     FLCompressed gpuMPICompress(uint8_t *data, size_t size, MpiData mpiData)
     {
-        Timers::CpuTimer cpuTimer;
+        Timers::CpuTimerWithTransfer timer(mpiData.rank);
 
         int rank = mpiData.rank;
         int nodesCount = mpiData.nodesCount;
@@ -49,22 +50,24 @@ namespace FixedLength
         {
             FLCompressed *compressedWholeData = new FLCompressed[nodesCount];
             compressedWholeData[rank] = compressedData;
-            cpuTimer.start();
+            timer.start();
             for (int i = 1; i < nodesCount; i++)
             {
                 compressedWholeData[i] = FixedLength::FLCompressed::ReceiveFLCompressed(i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                timer.addTransferSize(compressedWholeData[i].GetSizeSentByMPI());
             }
-            cpuTimer.end();
-            cpuTimer.printResult("Receive compressed data from all nodes");
+            timer.end();
+            timer.printResult("Receive compressed data from all nodes");
             MPI_Finalize();
             return FixedLength::FLCompressed::MergeFLCompressed(compressedWholeData, nodesCount);
         }
         else
         {
-            cpuTimer.start();
+            timer.start();
             FixedLength::FLCompressed::SendFLCompressed(compressedData, 0, 0, MPI_COMM_WORLD);
-            cpuTimer.end();
-            cpuTimer.printResult("Send compressed data to node 0");
+            timer.addTransferSize(compressedData.GetSizeSentByMPI());
+            timer.end();
+            timer.printResult("Send compressed data to node 0");
             MPI_Finalize();
             exit(0);
         }
@@ -72,7 +75,8 @@ namespace FixedLength
 
     FLCompressed gpuNCCLCompress(uint8_t *data, size_t size, MpiNcclData mpiNcclData)
     {
-        Timers::CpuTimer cpuTimer;
+        Timers::CpuTimer cpuTimer(mpiNcclData.rank);
+        Timers::CpuTimerWithTransfer timerWithTransfer(mpiNcclData.rank);
     
         // Get the rank and size from the provided MpiNcclData
         int rank = mpiNcclData.rank;
@@ -93,13 +97,17 @@ namespace FixedLength
         size_t *all_inputSizes = new size_t[nodesCount];
     
         // Gather metadata using MPI since NCCL doesn't handle variable-sized data well
+        timerWithTransfer.start();
         MPI_Allgather(&compressedData.bitsSize, 1, MPI_UNSIGNED_LONG,
                       all_bitsSizes, 1, MPI_UNSIGNED_LONG, MPI_COMM_WORLD);
         MPI_Allgather(&compressedData.valuesSize, 1, MPI_UNSIGNED_LONG,
                       all_valuesSizes, 1, MPI_UNSIGNED_LONG, MPI_COMM_WORLD);
         MPI_Allgather(&compressedData.inputSize, 1, MPI_UNSIGNED_LONG,
                       all_inputSizes, 1, MPI_UNSIGNED_LONG, MPI_COMM_WORLD);
-    
+        timerWithTransfer.addTransferSize(sizeof(size_t) * 3 * nodesCount);
+        timerWithTransfer.end();
+        timerWithTransfer.printResult("Gather metadata from all nodes");
+
         // Add barrier to ensure all MPI operations are complete
         MPI_Barrier(MPI_COMM_WORLD);
     
@@ -165,7 +173,7 @@ namespace FixedLength
         CHECK_CUDA(cudaStreamSynchronize(stream));
         
         // NCCL operations
-        cpuTimer.start();
+        timerWithTransfer.start();
         
         // Create a new NCCL group for this operation
         ncclGroupStart();
@@ -173,16 +181,21 @@ namespace FixedLength
         // AllGather for bits
         if (max_bitsSize > 0) {
             NCCLCHECK(ncclAllGather(d_send_bits, d_recv_bits, max_bitsSize, ncclUint8, comm, stream));
+            timerWithTransfer.addTransferSize(max_bitsSize);
         }
         
         // AllGather for values 
         if (max_valuesSize > 0) {
             NCCLCHECK(ncclAllGather(d_send_values, d_recv_values, max_valuesSize, ncclUint8, comm, stream));
+            timerWithTransfer.addTransferSize(max_valuesSize);
         }
         
         // End the NCCL group
         ncclGroupEnd();
         
+        timerWithTransfer.end();
+        timerWithTransfer.printResult("NCCL gather compressed data from all nodes");
+
         // Synchronize stream to ensure NCCL operations are complete
         CHECK_CUDA(cudaStreamSynchronize(stream));
                 
@@ -201,6 +214,7 @@ namespace FixedLength
         }
     
         // Copy from the padded buffers to the final unpadded merged buffers
+        cpuTimer.start();
         size_t bits_offset = 0;
         size_t values_offset = 0;
     
@@ -225,10 +239,9 @@ namespace FixedLength
         
         // Synchronize to ensure all copies are complete
         CHECK_CUDA(cudaStreamSynchronize(stream));
-            
         cpuTimer.end();
-        cpuTimer.printResult("NCCL gather compressed data from all nodes");
-    
+        cpuTimer.printResult("Copy merged data to final buffers"); 
+        
         // Clean up
         if (d_send_bits) CHECK_CUDA(cudaFree(d_send_bits));
         if (d_send_values) CHECK_CUDA(cudaFree(d_send_values));
@@ -387,6 +400,7 @@ namespace FixedLength
         {
             error = e;
             isError = true;
+            std::cout << e.what() << std::endl;
         }
 
         gpuTimer.start();
@@ -608,6 +622,7 @@ namespace FixedLength
         {
             error = e;
             isError = true;
+            std::cout << e.what() << std::endl;
         }
 
         gpuTimer.start();
